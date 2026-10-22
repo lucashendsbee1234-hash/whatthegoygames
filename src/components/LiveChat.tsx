@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, Users, ChevronDown, ChevronUp, User, Volume2, VolumeX, ShieldAlert } from 'lucide-react';
+import { MessageSquare, Send, ChevronDown, ChevronUp, User, Trash2 } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -9,101 +9,26 @@ interface ChatMessage {
 }
 
 interface LiveChatProps {
-  onlineCount: number;
+  isAdmin: boolean;
+  adminToken: string | null;
 }
 
-export const LiveChat: React.FC<LiveChatProps> = ({ onlineCount }) => {
+export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [nickname, setNickname] = useState(() => {
-    return localStorage.getItem('whatthegoy_nick') || `Player_${Math.floor(100 + Math.random() * 900)}`;
+    return localStorage.getItem('whatthegoy_nick') || `User_${Math.floor(100 + Math.random() * 900)}`;
   });
   const [isEditingNick, setIsEditingNick] = useState(false);
   const [tempNick, setTempNick] = useState(nickname);
   const [isOpen, setIsOpen] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // Beep for new messages
-  const playChatNotification = () => {
-    if (!soundEnabled) return;
-    try {
-      if (!audioCtxRef.current) {
-        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-        audioCtxRef.current = new AudioCtx();
-      }
-      if (audioCtxRef.current.state === 'suspended') {
-        audioCtxRef.current.resume();
-      }
-      const osc = audioCtxRef.current.createOscillator();
-      const gain = audioCtxRef.current.createGain();
-      osc.frequency.setValueAtTime(587.33, audioCtxRef.current.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, audioCtxRef.current.currentTime + 0.05); // A5
-      gain.gain.setValueAtTime(0.04, audioCtxRef.current.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtxRef.current.currentTime + 0.08);
-      osc.connect(gain);
-      gain.connect(audioCtxRef.current.destination);
-      osc.start();
-      osc.stop(audioCtxRef.current.currentTime + 0.08);
-    } catch {}
-  };
-
-  // Connect to SSE stream
+  // Cross-device live sync via SSE and polling fallback
   useEffect(() => {
     let eventSource: EventSource | null = null;
     let pollInterval: any = null;
-
-    const setupSSE = () => {
-      try {
-        eventSource = new EventSource('/api/chat/stream');
-
-        eventSource.onopen = () => {
-          setIsConnected(true);
-          if (pollInterval) clearInterval(pollInterval);
-        };
-
-        eventSource.addEventListener('init', (e: MessageEvent) => {
-          try {
-            const data = JSON.parse(e.data);
-            if (Array.isArray(data.messages)) {
-              setMessages(data.messages);
-            }
-          } catch (err) {
-            console.error('SSE init parse error:', err);
-          }
-        });
-
-        eventSource.addEventListener('chat_message', (e: MessageEvent) => {
-          try {
-            const msg: ChatMessage = JSON.parse(e.data);
-            setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev;
-              return [...prev, msg].slice(-250);
-            });
-            playChatNotification();
-          } catch (err) {
-            console.error('SSE chat_message parse error:', err);
-          }
-        });
-
-        eventSource.onerror = () => {
-          setIsConnected(false);
-          eventSource?.close();
-          // Fallback to polling every 3 seconds if SSE fails
-          if (!pollInterval) {
-            pollInterval = setInterval(fetchMessages, 3000);
-          }
-        };
-      } catch {
-        setIsConnected(false);
-        if (!pollInterval) {
-          pollInterval = setInterval(fetchMessages, 3000);
-        }
-      }
-    };
 
     const fetchMessages = async () => {
       try {
@@ -114,14 +39,52 @@ export const LiveChat: React.FC<LiveChatProps> = ({ onlineCount }) => {
             setMessages(data.messages);
           }
         }
-      } catch (err) {
-        // silent catch
-      }
+      } catch {}
     };
 
-    // Initial fetch
+    const setupSSE = () => {
+      try {
+        eventSource = new EventSource('/api/chat/stream');
+
+        eventSource.addEventListener('init', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (Array.isArray(data.messages)) {
+              setMessages(data.messages);
+            }
+          } catch {}
+        });
+
+        eventSource.addEventListener('chat_message', (e: MessageEvent) => {
+          try {
+            const msg: ChatMessage = JSON.parse(e.data);
+            setMessages(prev => {
+              if (prev.some(m => m.id === msg.id)) return prev;
+              return [...prev, msg].slice(-200);
+            });
+          } catch {}
+        });
+
+        eventSource.addEventListener('chat_message_deleted', (e: MessageEvent) => {
+          try {
+            const { id } = JSON.parse(e.data);
+            setMessages(prev => prev.filter(m => m.id !== id));
+          } catch {}
+        });
+
+        eventSource.addEventListener('chat_cleared', () => {
+          setMessages([]);
+        });
+
+        eventSource.onerror = () => {
+          eventSource?.close();
+        };
+      } catch {}
+    };
+
     fetchMessages();
     setupSSE();
+    pollInterval = setInterval(fetchMessages, 2500);
 
     return () => {
       if (eventSource) eventSource.close();
@@ -129,7 +92,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ onlineCount }) => {
     };
   }, []);
 
-  // Auto-scroll on new messages
+  // Scroll on messages change
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -142,121 +105,158 @@ export const LiveChat: React.FC<LiveChatProps> = ({ onlineCount }) => {
     if (!trimmed) return;
 
     setInputText('');
+    const currentSender = isAdmin ? 'Lucas (Admin)' : nickname;
 
     try {
-      const res = await fetch('/api/chat/message', {
+      await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sender: nickname,
+          sender: currentSender,
           text: trimmed,
         }),
       });
-      if (!res.ok) {
-        console.error('Error sending message');
-      }
-    } catch (err) {
-      console.error('Failed to send message:', err);
+    } catch {}
+  };
+
+  const handleDeleteMessage = async (id: string) => {
+    if (!isAdmin || !adminToken) return;
+    try {
+      await fetch(`/api/chat/message/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+        },
+      });
+      setMessages(prev => prev.filter(m => m.id !== id));
+    } catch {}
+  };
+
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const handleClearChat = async () => {
+    if (!isAdmin || !adminToken) return;
+    if (!confirmClear) {
+      setConfirmClear(true);
+      setTimeout(() => setConfirmClear(false), 3000);
+      return;
     }
+    setConfirmClear(false);
+    try {
+      await fetch('/api/chat/clear', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+        },
+      });
+      setMessages([]);
+    } catch {}
   };
 
   const saveNickname = () => {
-    const clean = tempNick.trim().slice(0, 20) || 'Player';
+    const clean = tempNick.trim().slice(0, 16) || 'User';
     setNickname(clean);
     localStorage.setItem('whatthegoy_nick', clean);
     setIsEditingNick(false);
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-80 md:w-96 flex flex-col font-mono text-xs select-none">
-      {/* Header Bar */}
+    <div className="fixed bottom-4 right-4 z-40 w-72 sm:w-80 flex flex-col font-mono text-xs select-none">
+      {/* Header */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
-        className="bg-black text-white border-2 border-white px-3 py-2 flex items-center justify-between cursor-pointer shadow-[3px_3px_0px_0px_#ffffff] hover:bg-neutral-900 transition-colors"
+        className="bg-black text-white border-2 border-white px-3 py-2 flex items-center justify-between cursor-pointer shadow-[3px_3px_0px_0px_#ffffff] hover:bg-neutral-900"
       >
         <div className="flex items-center gap-2 font-bold tracking-wider">
-          <MessageSquare className="w-4 h-4" />
-          <span>LIVE CHAT</span>
-          <span className="flex items-center gap-1.5 text-[10px] text-neutral-400 bg-neutral-900 px-2 py-0.5 border border-neutral-700">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            {onlineCount} ONLINE
-          </span>
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>CHAT</span>
+          {isAdmin && (
+            <span className="text-[9px] bg-white text-black px-1 font-bold">ADMIN</span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button 
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setSoundEnabled(!soundEnabled); }}
-            className="p-1 hover:text-neutral-300"
-            title={soundEnabled ? 'Mute sound' : 'Unmute sound'}
-          >
-            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5 text-neutral-500" />}
-          </button>
+        <div className="flex items-center gap-1.5">
+          {isAdmin && isOpen && (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleClearChat(); }}
+              className={`text-[9px] px-1 border transition-colors ${
+                confirmClear ? 'border-red-500 text-red-400 bg-red-950/40' : 'border-neutral-700 text-neutral-400 hover:text-red-400'
+              }`}
+              title="Clear Chat"
+            >
+              {confirmClear ? 'SURE?' : 'CLEAR'}
+            </button>
+          )}
           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
         </div>
       </div>
 
-      {/* Chat Body */}
+      {/* Body */}
       {isOpen && (
-        <div className="bg-[#0a0a0a] border-x-2 border-b-2 border-white flex flex-col h-80 shadow-[3px_3px_0px_0px_#ffffff]">
-          {/* Nickname Bar */}
-          <div className="bg-black border-b border-neutral-800 px-3 py-1.5 flex items-center justify-between text-[11px] text-neutral-400">
-            {isEditingNick ? (
-              <div className="flex items-center gap-1.5 w-full">
+        <div className="bg-black border-x-2 border-b-2 border-white flex flex-col h-72 shadow-[3px_3px_0px_0px_#ffffff]">
+          {/* User Nick Header */}
+          <div className="border-b border-neutral-800 px-3 py-1 flex items-center justify-between text-[11px] text-neutral-400">
+            {isAdmin ? (
+              <span className="text-white font-bold">Lucas (Admin)</span>
+            ) : isEditingNick ? (
+              <div className="flex items-center gap-1 w-full">
                 <input
                   type="text"
                   value={tempNick}
                   onChange={(e) => setTempNick(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && saveNickname()}
-                  maxLength={18}
-                  className="bg-neutral-900 text-white border border-white px-1.5 py-0.5 rounded-none text-xs flex-1 outline-none font-mono"
+                  maxLength={16}
+                  className="bg-neutral-900 text-white border border-neutral-600 px-1 py-0.5 text-xs flex-1 outline-none"
                   autoFocus
                 />
                 <button 
                   onClick={saveNickname}
-                  className="bg-white text-black px-2 py-0.5 font-bold hover:bg-neutral-200"
+                  className="bg-white text-black px-1.5 py-0.5 font-bold hover:bg-neutral-200"
                 >
-                  SAVE
+                  OK
                 </button>
               </div>
             ) : (
               <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-white" />
-                  <span>Chatting as: <strong className="text-white">{nickname}</strong></span>
-                </div>
+                <span className="truncate">Nick: <strong className="text-white">{nickname}</strong></span>
                 <button 
                   onClick={() => { setTempNick(nickname); setIsEditingNick(true); }}
                   className="text-neutral-400 hover:text-white underline text-[10px]"
                 >
-                  Change
+                  Edit
                 </button>
               </div>
             )}
           </div>
 
-          {/* Messages list */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 select-text">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 select-text">
             {messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-neutral-600 text-center gap-1">
-                <p>No messages yet.</p>
-                <p className="text-[10px]">Real peer chat &bull; No bots &bull; Say hi!</p>
+              <div className="h-full flex items-center justify-center text-neutral-600 text-xs">
+                No messages yet.
               </div>
             ) : (
               messages.map((msg) => {
-                const isMe = msg.sender === nickname;
-                const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const isMsgAdmin = msg.sender.includes('(Admin)') || msg.sender === 'Lucashendsbee';
                 return (
-                  <div key={msg.id} className="flex flex-col group leading-snug">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className={`font-bold ${isMe ? 'text-white underline decoration-white/40' : 'text-neutral-300'}`}>
+                  <div key={msg.id} className="flex items-start justify-between group gap-1 text-[11px] leading-snug">
+                    <div className="break-words flex-1">
+                      <span className={`font-bold mr-1 ${isMsgAdmin ? 'text-white underline' : 'text-neutral-300'}`}>
                         {msg.sender}:
                       </span>
-                      <span className="text-neutral-100 break-words flex-1">{msg.text}</span>
-                      <span className="text-[9px] text-neutral-600 font-mono select-none opacity-50 group-hover:opacity-100 transition-opacity">
-                        {time}
-                      </span>
+                      <span className="text-neutral-100">{msg.text}</span>
                     </div>
+
+                    {/* Admin Moderation Button */}
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        className="opacity-40 group-hover:opacity-100 text-neutral-500 hover:text-red-400 shrink-0 p-0.5"
+                        title="Delete message"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 );
               })
@@ -264,22 +264,22 @@ export const LiveChat: React.FC<LiveChatProps> = ({ onlineCount }) => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Chat Input */}
-          <form onSubmit={handleSendMessage} className="p-2 border-t border-neutral-800 bg-black flex gap-1.5">
+          {/* Input */}
+          <form onSubmit={handleSendMessage} className="p-1.5 border-t border-neutral-800 bg-neutral-950 flex gap-1">
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Type message & press Enter..."
-              maxLength={400}
-              className="flex-1 bg-neutral-900 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-white placeholder-neutral-500 outline-none text-xs font-mono"
+              placeholder="Message..."
+              maxLength={300}
+              className="flex-1 bg-black border border-neutral-800 focus:border-white px-2 py-1 text-white placeholder-neutral-600 outline-none text-xs"
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="bg-white text-black px-3 py-1.5 font-bold hover:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-opacity"
+              className="bg-white text-black px-2.5 py-1 font-bold text-xs hover:bg-neutral-200 disabled:opacity-30"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3 h-3" />
             </button>
           </form>
         </div>

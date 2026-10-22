@@ -1,34 +1,30 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, FileCode, Check, AlertCircle } from 'lucide-react';
+import { X, Upload, FileCode } from 'lucide-react';
 
 interface AddGameModalProps {
+  adminToken: string;
   onClose: () => void;
   onGameAdded: (game: any) => void;
 }
 
-export const AddGameModal: React.FC<AddGameModalProps> = ({ onClose, onGameAdded }) => {
+export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose, onGameAdded }) => {
   const [dragOver, setDragOver] = useState(false);
   const [filename, setFilename] = useState('');
   const [htmlContent, setHtmlContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = (file: File) => {
     if (!file.name.toLowerCase().endsWith('.html') && !file.name.toLowerCase().endsWith('.htm')) {
-      setError('Please select an .html file.');
+      setError('Select an .html file.');
       return;
     }
     setError(null);
     setFilename(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setHtmlContent(content);
-    };
-    reader.onerror = () => {
-      setError('Failed to read file.');
+      setHtmlContent(e.target?.result as string);
     };
     reader.readAsText(file);
   };
@@ -47,12 +43,8 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ onClose, onGameAdded
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!filename.trim()) {
-      setError('Please provide a file name.');
-      return;
-    }
-    if (!htmlContent.trim()) {
-      setError('HTML content cannot be empty.');
+    if (!filename.trim() || !htmlContent.trim()) {
+      setError('File and content required.');
       return;
     }
 
@@ -62,7 +54,10 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ onClose, onGameAdded
     try {
       const res = await fetch('/api/games/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`,
+        },
         body: JSON.stringify({
           filename: filename.trim(),
           content: htmlContent,
@@ -71,49 +66,38 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ onClose, onGameAdded
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to upload game');
+        throw new Error(data.error || 'Failed to upload');
       }
 
-      setSuccess(true);
       onGameAdded(data.game);
-      setTimeout(() => {
-        onClose();
-      }, 700);
+      onClose();
     } catch (err: any) {
-      setError(err.message || 'Error uploading game');
+      setError(err.message || 'Upload failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 font-mono select-none">
-      <div className="bg-[#0a0a0a] border-2 border-white w-full max-w-xl text-white shadow-[6px_6px_0px_0px_#ffffff] flex flex-col">
-        {/* Header */}
-        <div className="bg-black border-b-2 border-white px-4 py-3 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 font-mono select-none">
+      <div className="bg-black border-2 border-white w-full max-w-md text-white shadow-[4px_4px_0px_0px_#ffffff]">
+        <div className="border-b-2 border-white px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileCode className="w-4 h-4 text-white" />
-            <span className="font-bold tracking-wider text-sm">ADD .HTML GAME</span>
+            <FileCode className="w-3.5 h-3.5" />
+            <span className="font-bold text-xs uppercase tracking-wider">Upload Game</span>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-neutral-800 border border-neutral-700 hover:border-white">
+          <button onClick={onClose} className="hover:text-neutral-400 p-0.5">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="text-xs text-neutral-400 bg-neutral-950 border border-neutral-800 p-3 leading-relaxed">
-            <strong className="text-white block mb-1">AUTOMATIC /GAMES DISCOVERY</strong>
-            Any <code className="text-white bg-neutral-900 px-1 py-0.5 border border-neutral-700">.html</code> file placed directly into the <code className="text-white bg-neutral-900 px-1 py-0.5 border border-neutral-700">/games</code> directory is detected instantly and added to the homepage! You can drop it into the folder or upload it here.
-          </div>
-
-          {/* Drag & drop box */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+            className={`border border-dashed p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
               dragOver ? 'border-white bg-neutral-900' : 'border-neutral-700 hover:border-neutral-400 bg-neutral-950'
             }`}
           >
@@ -124,66 +108,56 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ onClose, onGameAdded
               accept=".html,.htm"
               className="hidden"
             />
-            <Upload className="w-8 h-8 mb-2 text-neutral-400" />
-            <p className="text-xs font-bold text-white mb-1">
-              {filename ? `Selected: ${filename}` : 'DRAG & DROP A .HTML GAME FILE HERE'}
+            <Upload className="w-6 h-6 mb-1.5 text-neutral-400" />
+            <p className="text-xs text-white">
+              {filename ? filename : 'Drop .html game or browse'}
             </p>
-            <p className="text-[10px] text-neutral-500">or click to browse your computer</p>
           </div>
 
-          {/* Filename input */}
           <div>
-            <label className="block text-[11px] text-neutral-400 mb-1">TARGET FILENAME IN /GAMES</label>
+            <label className="block text-[10px] text-neutral-400 mb-1 uppercase">Filename</label>
             <input
               type="text"
               value={filename}
               onChange={(e) => setFilename(e.target.value)}
-              placeholder="e.g. pacman.html, doom.html, mario.html"
-              className="w-full bg-black border border-neutral-700 focus:border-white px-3 py-2 text-xs font-mono outline-none text-white"
+              placeholder="game.html"
+              className="w-full bg-neutral-950 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-xs text-white outline-none"
+              required
             />
           </div>
 
-          {/* Paste HTML option */}
           <div>
-            <label className="block text-[11px] text-neutral-400 mb-1">HTML CODE (OR PASTE DIRECTLY)</label>
+            <label className="block text-[10px] text-neutral-400 mb-1 uppercase">HTML Content</label>
             <textarea
               value={htmlContent}
               onChange={(e) => setHtmlContent(e.target.value)}
-              placeholder="<!DOCTYPE html><html><body>...</body></html>"
+              placeholder="<!DOCTYPE html>..."
               rows={4}
-              className="w-full bg-black border border-neutral-700 focus:border-white px-3 py-2 text-xs font-mono outline-none text-white resize-none"
+              className="w-full bg-neutral-950 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-xs text-white outline-none resize-none font-mono"
+              required
             />
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-950/40 border border-rose-800 p-2.5">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
+            <div className="text-[11px] text-red-400 bg-red-950/40 border border-red-800 p-2">
+              {error}
             </div>
           )}
 
-          {success && (
-            <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800 p-2.5">
-              <Check className="w-4 h-4 shrink-0" />
-              <span>Game saved to /games folder and added to homepage!</span>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-neutral-700 text-neutral-400 hover:text-white hover:border-white text-xs"
+              className="px-3 py-1 border border-neutral-700 text-neutral-400 hover:text-white text-xs"
             >
-              CANCEL
+              Cancel
             </button>
             <button
               type="submit"
               disabled={loading || !filename || !htmlContent}
-              className="bg-white text-black px-5 py-2 font-bold text-xs hover:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+              className="bg-white text-black px-4 py-1 font-bold text-xs hover:bg-neutral-200 disabled:opacity-40"
             >
-              {loading ? 'SAVING...' : 'ADD TO HOMEPAGE'}
+              {loading ? '...' : 'Upload'}
             </button>
           </div>
         </form>

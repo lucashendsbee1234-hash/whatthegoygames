@@ -48,14 +48,13 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({ game, onClose,
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Panic button shortcut inside player */}
+            {/* Panic button */}
             <button
               onClick={onPanic}
-              className="bg-white text-black font-bold px-2.5 py-1 flex items-center gap-1.5 hover:bg-neutral-300 text-[11px] tracking-wide"
-              title="Instant Panic: Switch to Fake Google Doc"
+              className="bg-white text-black font-bold px-2 py-1 flex items-center gap-1 hover:bg-neutral-300 text-xs"
             >
               <ShieldAlert className="w-3.5 h-3.5 text-black" />
-              <span>PANIC (ESC)</span>
+              <span>PANIC</span>
             </button>
 
             {/* Reload game */}

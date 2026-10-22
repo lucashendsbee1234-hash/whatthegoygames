@@ -1,6 +1,8 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 
@@ -28,6 +30,13 @@ interface ChatMessage {
   timestamp: number;
 }
 
+// In-memory active admin tokens
+const activeAdminTokens = new Set<string>();
+
+// Predefined admin credentials specified by user
+const ADMIN_USER = 'Lucashendsbee';
+const ADMIN_PASS = 'Hendsbee2011?';
+
 // Load persisted messages
 let chatMessages: ChatMessage[] = [];
 try {
@@ -36,7 +45,6 @@ try {
     chatMessages = JSON.parse(raw);
   }
 } catch (err) {
-  console.warn('Could not read existing chat messages, starting fresh:', err);
   chatMessages = [];
 }
 
@@ -44,11 +52,11 @@ function persistChat() {
   try {
     fs.writeFileSync(chatFile, JSON.stringify(chatMessages.slice(-200), null, 2), 'utf-8');
   } catch (err) {
-    console.error('Failed to persist chat messages:', err);
+    console.error('Failed to save chat:', err);
   }
 }
 
-// SSE Clients for real-time live chat
+// SSE Clients for live cross-device updates
 type SSEClient = {
   id: string;
   res: Response;
@@ -61,7 +69,7 @@ function broadcastSSE(event: string, data: any) {
     try {
       client.res.write(payload);
     } catch {
-      // client likely disconnected
+      // client disconnected
     }
   }
 }
@@ -78,13 +86,23 @@ function getGameTitle(filename: string, fullPath: string): string {
     if (match && match[1].trim()) {
       return match[1].trim();
     }
-  } catch {
-    // fallback to filename
-  }
+  } catch {}
   const nameWithoutExt = filename.replace(/\.html$/i, '');
   return nameWithoutExt
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+// Admin validation middleware
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : (req.body?.adminToken || req.query?.adminToken);
+
+  if (!token || !activeAdminTokens.has(token as string)) {
+    res.status(401).json({ success: false, error: 'Admin access required' });
+    return;
+  }
+  next();
 }
 
 async function startServer() {
@@ -93,6 +111,18 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // CORS for cross-device support
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(200);
+      return;
+    }
+    next();
+  });
+
   // Serve static games with permissive headers for iframes
   app.use('/games', (req, res, next) => {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -100,8 +130,36 @@ async function startServer() {
     next();
   }, express.static(gamesDir));
 
+  // --- Admin Authentication API ---
+  app.post('/api/admin/login', (req: Request, res: Response) => {
+    const { username, password } = req.body;
+    if (username === ADMIN_USER && password === ADMIN_PASS) {
+      const token = 'wtg_' + crypto.randomBytes(24).toString('hex');
+      activeAdminTokens.add(token);
+      res.json({ success: true, token, username: ADMIN_USER });
+    } else {
+      res.status(401).json({ success: false, error: 'Invalid username or password' });
+    }
+  });
+
+  app.post('/api/admin/verify', (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.body?.token;
+    if (token && activeAdminTokens.has(token)) {
+      res.json({ success: true, valid: true, username: ADMIN_USER });
+    } else {
+      res.json({ success: false, valid: false });
+    }
+  });
+
+  app.post('/api/admin/logout', (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.body?.token;
+    if (token) activeAdminTokens.delete(token);
+    res.json({ success: true });
+  });
+
   // --- Games API ---
-  // Returns all .html games dynamically found in /games folder
   app.get('/api/games', (req: Request, res: Response) => {
     try {
       if (!fs.existsSync(gamesDir)) {
@@ -131,18 +189,17 @@ async function startServer() {
         };
       });
 
-      // Sort by modified time descending (newest games first)
+      // Newest games first
       games.sort((a, b) => b.updatedAt - a.updatedAt);
 
       res.json({ success: true, games, count: games.length });
     } catch (err: any) {
-      console.error('Error listing games:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Upload or add a new .html game
-  app.post('/api/games/upload', (req: Request, res: Response) => {
+  // Upload a new .html game (ADMIN ONLY)
+  app.post('/api/games/upload', requireAdmin, (req: Request, res: Response) => {
     try {
       const { filename, content } = req.body;
       if (!filename || typeof filename !== 'string') {
@@ -154,7 +211,6 @@ async function startServer() {
         return;
       }
 
-      // Sanitize filename to prevent directory traversal
       let safeName = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
       if (!safeName.toLowerCase().endsWith('.html')) {
         safeName += '.html';
@@ -175,31 +231,30 @@ async function startServer() {
         updatedAt: stat.mtimeMs,
       };
 
-      // Notify clients
+      // Broadcast live to all devices immediately!
       broadcastSSE('game_added', gameObj);
 
       res.json({ success: true, game: gameObj });
     } catch (err: any) {
-      console.error('Error saving game:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // Delete a game
-  app.delete('/api/games/:filename', (req: Request, res: Response) => {
+  // Delete a game (ADMIN ONLY)
+  app.delete('/api/games/:filename', requireAdmin, (req: Request, res: Response) => {
     try {
       const filename = path.basename(req.params.filename);
       const targetPath = path.join(gamesDir, filename);
 
       if (fs.existsSync(targetPath)) {
         fs.unlinkSync(targetPath);
+        // Broadcast live to all devices immediately!
         broadcastSSE('game_deleted', { filename });
         res.json({ success: true });
       } else {
         res.status(404).json({ success: false, error: 'File not found' });
       }
     } catch (err: any) {
-      console.error('Error deleting game:', err);
       res.status(500).json({ success: false, error: err.message });
     }
   });
@@ -211,8 +266,8 @@ async function startServer() {
 
   app.post('/api/chat/message', (req: Request, res: Response) => {
     const { sender, text } = req.body;
-    const cleanSender = String(sender || 'Anonymous').trim().slice(0, 24);
-    const cleanText = String(text || '').trim().slice(0, 500);
+    const cleanSender = String(sender || 'Anonymous').trim().slice(0, 20);
+    const cleanText = String(text || '').trim().slice(0, 400);
 
     if (!cleanText) {
       res.status(400).json({ success: false, error: 'Message cannot be empty' });
@@ -227,18 +282,42 @@ async function startServer() {
     };
 
     chatMessages.push(newMessage);
-    if (chatMessages.length > 300) {
-      chatMessages = chatMessages.slice(-300);
+    if (chatMessages.length > 200) {
+      chatMessages = chatMessages.slice(-200);
     }
     persistChat();
 
-    // Broadcast to SSE clients
+    // Broadcast live across all devices immediately!
     broadcastSSE('chat_message', newMessage);
 
     res.json({ success: true, message: newMessage });
   });
 
-  // SSE Stream for Live Chat & Game events
+  // Moderate / Delete message (ADMIN ONLY)
+  app.delete('/api/chat/message/:id', requireAdmin, (req: Request, res: Response) => {
+    const id = req.params.id;
+    const initialLen = chatMessages.length;
+    chatMessages = chatMessages.filter(m => m.id !== id);
+    if (chatMessages.length !== initialLen) {
+      persistChat();
+      // Broadcast deletion live to all devices
+      broadcastSSE('chat_message_deleted', { id });
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'Message not found' });
+    }
+  });
+
+  // Clear all messages (ADMIN ONLY)
+  app.post('/api/chat/clear', requireAdmin, (req: Request, res: Response) => {
+    chatMessages = [];
+    persistChat();
+    // Broadcast clear live to all devices
+    broadcastSSE('chat_cleared', {});
+    res.json({ success: true });
+  });
+
+  // SSE Stream for Live Chat & Game events across all connected devices
   app.get('/api/chat/stream', (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -248,7 +327,7 @@ async function startServer() {
     const clientId = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     sseClients.set(clientId, { id: clientId, res });
 
-    // Send initial payload with recent messages and online count
+    // Initial payload
     res.write(`event: init\ndata: ${JSON.stringify({
       messages: chatMessages.slice(-100),
       onlineCount: sseClients.size,
@@ -256,7 +335,6 @@ async function startServer() {
 
     broadcastOnlineCount();
 
-    // Keepalive ping
     const keepalive = setInterval(() => {
       res.write(': keepalive\n\n');
     }, 20000);
@@ -268,14 +346,15 @@ async function startServer() {
     });
   });
 
-  app.get('/api/online', (req: Request, res: Response) => {
-    res.json({ onlineCount: sseClients.size });
-  });
-
   // --- Dev / Prod Static serving ---
+  const server = http.createServer(app);
+
   if (!isProd) {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -287,7 +366,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`[whatthegoy] Server running on http://0.0.0.0:${PORT}`);
   });
 }
