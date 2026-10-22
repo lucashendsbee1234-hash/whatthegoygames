@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, ShieldAlert, Play, Trash2, LogIn, LogOut, ExternalLink, Image as ImageIcon } from 'lucide-react';
+import { Search, Plus, ShieldAlert, Play, Trash2, LogIn, LogOut, ExternalLink, Image as ImageIcon, GraduationCap } from 'lucide-react';
 import { FakeGoogleDoc } from './components/FakeGoogleDoc';
 import { LiveChat } from './components/LiveChat';
 import { GamePlayerModal } from './components/GamePlayerModal';
 import { AddGameModal } from './components/AddGameModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { EditPhotoModal } from './components/EditPhotoModal';
+import { SchoolWebsite } from './components/SchoolWebsite';
 
 interface Game {
   id: string;
@@ -22,6 +23,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [isPanic, setIsPanic] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(() => sessionStorage.getItem('wtg_unlocked') === 'true');
   
   // Admin auth
   const [isAdmin, setIsAdmin] = useState(false);
@@ -104,16 +106,31 @@ export default function App() {
     };
   }, [fetchGames]);
 
-  // Global Panic Key (Esc or `)
+  // Global Panic Key (Esc or `) and Cloak lock (F2)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === '`') {
         setIsPanic(prev => !prev);
       }
+      if (e.key === 'F2') {
+        setIsUnlocked(false);
+        sessionStorage.removeItem('wtg_unlocked');
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Restore title when game hub is unlocked
+  useEffect(() => {
+    if (isUnlocked && !isPanic) {
+      document.title = 'whatthegoy';
+      let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      if (link) {
+        link.href = '/favicon.ico';
+      }
+    }
+  }, [isUnlocked, isPanic]);
 
   const handleLoginSuccess = (token: string) => {
     setIsAdmin(true);
@@ -158,6 +175,17 @@ export default function App() {
     g.filename.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (!isUnlocked) {
+    return (
+      <SchoolWebsite
+        onUnlock={() => {
+          setIsUnlocked(true);
+          sessionStorage.setItem('wtg_unlocked', 'true');
+        }}
+      />
+    );
+  }
+
   return (
     <>
       {/* Panic Screen: Fake Google Doc */}
@@ -186,11 +214,24 @@ export default function App() {
                 </button>
               )}
 
+              {/* Cloak / Lock Back to School Website */}
+              <button
+                onClick={() => {
+                  setIsUnlocked(false);
+                  sessionStorage.removeItem('wtg_unlocked');
+                }}
+                className="flex items-center gap-1.5 border border-neutral-700 px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:border-white transition-colors"
+                title="Cloak back to School Website (F2)"
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">SCHOOL</span>
+              </button>
+
               {/* Panic Button */}
               <button
                 onClick={() => setIsPanic(true)}
                 className="flex items-center gap-1.5 border border-white px-3 py-1 font-bold text-xs hover:bg-white hover:text-black transition-colors"
-                title="Panic to Google Doc"
+                title="Panic to Google Doc (ESC)"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
                 <span>PANIC</span>
