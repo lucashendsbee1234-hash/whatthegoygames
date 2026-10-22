@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, ShieldAlert, Play, Trash2, LogIn, LogOut, ExternalLink } from 'lucide-react';
+import { Search, Plus, ShieldAlert, Play, Trash2, LogIn, LogOut, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { FakeGoogleDoc } from './components/FakeGoogleDoc';
 import { LiveChat } from './components/LiveChat';
 import { GamePlayerModal } from './components/GamePlayerModal';
 import { AddGameModal } from './components/AddGameModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
+import { EditPhotoModal } from './components/EditPhotoModal';
 
 interface Game {
   id: string;
   filename: string;
   title: string;
   url: string;
+  imageUrl?: string;
   size: number;
   updatedAt: number;
 }
@@ -26,6 +28,7 @@ export default function App() {
   const [adminToken, setAdminToken] = useState<string | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingPhotoGame, setEditingPhotoGame] = useState<Game | null>(null);
 
   // Verify stored admin token on start
   useEffect(() => {
@@ -73,6 +76,14 @@ export default function App() {
         try {
           const game: Game = JSON.parse(e.data);
           setGames(prev => [game, ...prev.filter(g => g.filename !== game.filename)]);
+        } catch {
+          fetchGames();
+        }
+      });
+      es.addEventListener('game_updated', (e: MessageEvent) => {
+        try {
+          const updated: Game = JSON.parse(e.data);
+          setGames(prev => prev.map(g => g.filename === updated.filename ? { ...g, ...updated } : g));
         } catch {
           fetchGames();
         }
@@ -233,45 +244,77 @@ export default function App() {
                 <div
                   key={game.id}
                   onClick={() => setActiveGame(game)}
-                  className="bg-black border border-neutral-800 hover:border-white p-3 flex flex-col justify-between cursor-pointer transition-colors group"
+                  className="bg-black border border-neutral-800 hover:border-white flex flex-col justify-between cursor-pointer transition-colors group overflow-hidden"
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] text-neutral-500 truncate max-w-[110px]">
-                        {game.filename}
-                      </span>
-                      {isAdmin && (
-                        <button
-                          onClick={(e) => handleDeleteGame(e, game.filename)}
-                          className={`p-0.5 text-xs transition-colors ${
-                            confirmDelete === game.filename ? 'text-red-400 font-bold' : 'text-neutral-500 hover:text-red-400'
-                          }`}
-                          title={confirmDelete === game.filename ? 'Click again to delete' : 'Delete game'}
-                        >
-                          {confirmDelete === game.filename ? 'DEL?' : <Trash2 className="w-3 h-3" />}
-                        </button>
-                      )}
+                  {/* Game Photo / Banner */}
+                  {game.imageUrl ? (
+                    <div className="w-full h-28 sm:h-32 bg-neutral-950 overflow-hidden relative border-b border-neutral-850">
+                      <img
+                        src={game.imageUrl}
+                        alt={game.title}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
                     </div>
-                    <h2 className="text-xs font-bold text-white uppercase tracking-wide group-hover:underline">
-                      {game.title}
-                    </h2>
-                  </div>
+                  ) : (
+                    <div className="w-full h-20 bg-neutral-950 border-b border-neutral-900 flex items-center justify-center text-neutral-700 group-hover:text-neutral-400 transition-colors">
+                      <ImageIcon className="w-5 h-5 stroke-1" />
+                    </div>
+                  )}
 
-                  <div className="mt-4 pt-2 border-t border-neutral-900 flex items-center justify-between text-[10px] text-neutral-500">
-                    <span className="flex items-center gap-1 group-hover:text-white">
-                      <Play className="w-2.5 h-2.5 fill-current" />
-                      PLAY
-                    </span>
-                    <a
-                      href={game.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="hover:text-white"
-                      title="New Tab"
-                    >
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
+                  <div className="p-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] text-neutral-500 truncate max-w-[90px]">
+                          {game.filename}
+                        </span>
+                        {isAdmin && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPhotoGame(game);
+                              }}
+                              className="text-neutral-500 hover:text-white p-0.5"
+                              title="Set or change photo"
+                            >
+                              <ImageIcon className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteGame(e, game.filename)}
+                              className={`p-0.5 text-xs transition-colors ${
+                                confirmDelete === game.filename ? 'text-red-400 font-bold' : 'text-neutral-500 hover:text-red-400'
+                              }`}
+                              title={confirmDelete === game.filename ? 'Click again to delete' : 'Delete game'}
+                            >
+                              {confirmDelete === game.filename ? 'DEL?' : <Trash2 className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <h2 className="text-xs font-bold text-white uppercase tracking-wide group-hover:underline">
+                        {game.title}
+                      </h2>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-neutral-900 flex items-center justify-between text-[10px] text-neutral-500">
+                      <span className="flex items-center gap-1 group-hover:text-white font-bold">
+                        <Play className="w-2.5 h-2.5 fill-current" />
+                        PLAY
+                      </span>
+                      <a
+                        href={game.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:text-white"
+                        title="New Tab"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -294,6 +337,19 @@ export default function App() {
             onClose={() => setIsAddModalOpen(false)}
             onGameAdded={(newGame) => {
               setGames(prev => [newGame, ...prev.filter(g => g.filename !== newGame.filename)]);
+            }}
+          />
+        )}
+
+        {editingPhotoGame && adminToken && (
+          <EditPhotoModal
+            gameFilename={editingPhotoGame.filename}
+            gameTitle={editingPhotoGame.title}
+            currentImageUrl={editingPhotoGame.imageUrl || ''}
+            adminToken={adminToken}
+            onClose={() => setEditingPhotoGame(null)}
+            onSuccess={(updated) => {
+              setGames(prev => prev.map(g => g.filename === updated.filename ? { ...g, ...updated } : g));
             }}
           />
         )}

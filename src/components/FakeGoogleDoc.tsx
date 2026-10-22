@@ -268,7 +268,7 @@ export const FakeGoogleDoc: React.FC<FakeGoogleDocProps> = ({ onExit }) => {
               The Socio-Economic Centralization and Trans-Saharan Gold-Salt Trade Networks of the Songhai Empire (1464–1591)
             </h1>
             <p className="text-sm text-gray-700 italic">
-              Lucas Hendsbee &bull; Advanced Placement World History: Modern &bull; Period 4 &bull; October 21, 2026
+              Alex Morgan &bull; Advanced Placement World History: Modern &bull; Period 4 &bull; October 21, 2026
             </p>
           </div>
 

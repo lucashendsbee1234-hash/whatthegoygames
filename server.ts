@@ -9,11 +9,12 @@ import { createServer as createViteServer } from 'vite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 const isProd = process.env.NODE_ENV === 'production';
 const gamesDir = path.resolve(__dirname, 'games');
 const dataDir = path.resolve(__dirname, 'data');
 const chatFile = path.resolve(dataDir, 'chat_messages.json');
+const gamesMetaFile = path.resolve(dataDir, 'games_meta.json');
 
 // Ensure directories exist
 if (!fs.existsSync(gamesDir)) {
@@ -21,6 +22,24 @@ if (!fs.existsSync(gamesDir)) {
 }
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// Game metadata (e.g. photos, custom thumbnails)
+let gamesMeta: Record<string, { imageUrl?: string; title?: string }> = {};
+try {
+  if (fs.existsSync(gamesMetaFile)) {
+    gamesMeta = JSON.parse(fs.readFileSync(gamesMetaFile, 'utf-8'));
+  }
+} catch {
+  gamesMeta = {};
+}
+
+function persistGamesMeta() {
+  try {
+    fs.writeFileSync(gamesMetaFile, JSON.stringify(gamesMeta, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save games meta:', err);
+  }
 }
 
 interface ChatMessage {
@@ -91,6 +110,22 @@ function getGameTitle(filename: string, fullPath: string): string {
   return nameWithoutExt
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+// Helper to get game photo/thumbnail URL
+function getGameImage(filename: string, fullPath: string): string {
+  if (gamesMeta[filename]?.imageUrl) {
+    return gamesMeta[filename].imageUrl!;
+  }
+  try {
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const match = content.match(/<meta\s+(?:name|property)=["'](?:thumbnail|image|og:image)["']\s+content=["']([^"']+)["']/i) ||
+                  content.match(/<meta\s+content=["']([^"']+)["']\s+(?:name|property)=["'](?:thumbnail|image|og:image)["']/i);
+    if (match && match[1].trim()) {
+      return match[1].trim();
+    }
+  } catch {}
+  return '';
 }
 
 // Admin validation middleware
@@ -179,11 +214,13 @@ async function startServer() {
         }
 
         const title = getGameTitle(filename, fullPath);
+        const imageUrl = getGameImage(filename, fullPath);
         return {
           id: filename,
           filename,
           title,
           url: `/games/${encodeURIComponent(filename)}`,
+          imageUrl,
           size: stat.size,
           updatedAt: stat.mtimeMs,
         };
@@ -201,7 +238,7 @@ async function startServer() {
   // Upload a new .html game (ADMIN ONLY)
   app.post('/api/games/upload', requireAdmin, (req: Request, res: Response) => {
     try {
-      const { filename, content } = req.body;
+      const { filename, content, imageUrl } = req.body;
       if (!filename || typeof filename !== 'string') {
         res.status(400).json({ success: false, error: 'Filename is required' });
         return;
@@ -219,6 +256,12 @@ async function startServer() {
       const targetPath = path.join(gamesDir, safeName);
       fs.writeFileSync(targetPath, content, 'utf-8');
 
+      const cleanImageUrl = String(imageUrl || '').trim();
+      if (cleanImageUrl) {
+        gamesMeta[safeName] = { ...gamesMeta[safeName], imageUrl: cleanImageUrl };
+        persistGamesMeta();
+      }
+
       const title = getGameTitle(safeName, targetPath);
       const stat = fs.statSync(targetPath);
 
@@ -227,6 +270,7 @@ async function startServer() {
         filename: safeName,
         title,
         url: `/games/${encodeURIComponent(safeName)}`,
+        imageUrl: cleanImageUrl || getGameImage(safeName, targetPath),
         size: stat.size,
         updatedAt: stat.mtimeMs,
       };
@@ -240,6 +284,43 @@ async function startServer() {
     }
   });
 
+  // Update game photo/thumbnail URL (ADMIN ONLY)
+  app.post('/api/games/:filename/photo', requireAdmin, (req: Request, res: Response) => {
+    try {
+      const filename = path.basename(req.params.filename);
+      const { imageUrl } = req.body;
+      const cleanUrl = String(imageUrl || '').trim();
+
+      const targetPath = path.join(gamesDir, filename);
+      if (!fs.existsSync(targetPath)) {
+        res.status(404).json({ success: false, error: 'Game not found' });
+        return;
+      }
+
+      gamesMeta[filename] = { ...gamesMeta[filename], imageUrl: cleanUrl };
+      persistGamesMeta();
+
+      const title = getGameTitle(filename, targetPath);
+      const stat = fs.statSync(targetPath);
+      const updatedGame = {
+        id: filename,
+        filename,
+        title,
+        url: `/games/${encodeURIComponent(filename)}`,
+        imageUrl: cleanUrl,
+        size: stat.size,
+        updatedAt: stat.mtimeMs,
+      };
+
+      // Broadcast live update across all devices!
+      broadcastSSE('game_updated', updatedGame);
+
+      res.json({ success: true, game: updatedGame });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Delete a game (ADMIN ONLY)
   app.delete('/api/games/:filename', requireAdmin, (req: Request, res: Response) => {
     try {
@@ -248,6 +329,10 @@ async function startServer() {
 
       if (fs.existsSync(targetPath)) {
         fs.unlinkSync(targetPath);
+        if (gamesMeta[filename]) {
+          delete gamesMeta[filename];
+          persistGamesMeta();
+        }
         // Broadcast live to all devices immediately!
         broadcastSSE('game_deleted', { filename });
         res.json({ success: true });

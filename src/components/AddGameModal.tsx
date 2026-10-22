@@ -11,6 +11,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
   const [dragOver, setDragOver] = useState(false);
   const [filename, setFilename] = useState('');
   const [htmlContent, setHtmlContent] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +62,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
         body: JSON.stringify({
           filename: filename.trim(),
           content: htmlContent,
+          imageUrl: imageUrl.trim(),
         }),
       });
 
@@ -97,7 +99,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border border-dashed p-5 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+            className={`border border-dashed p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
               dragOver ? 'border-white bg-neutral-900' : 'border-neutral-700 hover:border-neutral-400 bg-neutral-950'
             }`}
           >
@@ -108,7 +110,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
               accept=".html,.htm"
               className="hidden"
             />
-            <Upload className="w-6 h-6 mb-1.5 text-neutral-400" />
+            <Upload className="w-5 h-5 mb-1 text-neutral-400" />
             <p className="text-xs text-white">
               {filename ? filename : 'Drop .html game or browse'}
             </p>
@@ -127,12 +129,36 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
           </div>
 
           <div>
+            <label className="block text-[10px] text-neutral-400 mb-1 uppercase">Photo / Image URL</label>
+            <input
+              type="url"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://... (e.g. cloudinary link)"
+              className="w-full bg-neutral-950 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-xs text-white outline-none"
+            />
+            {imageUrl && (
+              <div className="mt-2 border border-neutral-800 p-1 flex items-center gap-2 bg-neutral-950">
+                <img
+                  src={imageUrl}
+                  alt="Game Preview"
+                  className="w-12 h-12 object-cover border border-neutral-700"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+                <span className="text-[10px] text-neutral-400 truncate">Image preview</span>
+              </div>
+            )}
+          </div>
+
+          <div>
             <label className="block text-[10px] text-neutral-400 mb-1 uppercase">HTML Content</label>
             <textarea
               value={htmlContent}
               onChange={(e) => setHtmlContent(e.target.value)}
               placeholder="<!DOCTYPE html>..."
-              rows={4}
+              rows={3}
               className="w-full bg-neutral-950 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-xs text-white outline-none resize-none font-mono"
               required
             />

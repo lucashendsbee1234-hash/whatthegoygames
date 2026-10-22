@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, ChevronDown, ChevronUp, User, Trash2 } from 'lucide-react';
+import { MessageSquare, Send, ChevronDown, ChevronUp, Trash2, Shield } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -16,12 +16,12 @@ interface LiveChatProps {
 export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [nickname, setNickname] = useState(() => {
+  const [customUsername, setCustomUsername] = useState(() => {
     return localStorage.getItem('whatthegoy_nick') || `User_${Math.floor(100 + Math.random() * 900)}`;
   });
-  const [isEditingNick, setIsEditingNick] = useState(false);
-  const [tempNick, setTempNick] = useState(nickname);
+  const [showAdminTag, setShowAdminTag] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -99,20 +99,27 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     }
   }, [messages, isOpen]);
 
+  const handleUsernameChange = (val: string) => {
+    const clean = val.slice(0, 20);
+    setCustomUsername(clean);
+    localStorage.setItem('whatthegoy_nick', clean);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = inputText.trim();
     if (!trimmed) return;
 
     setInputText('');
-    const currentSender = isAdmin ? 'Lucas (Admin)' : nickname;
+    const baseNick = customUsername.trim() || 'Anonymous';
+    const finalSender = isAdmin && showAdminTag ? `${baseNick} [Admin]` : baseNick;
 
     try {
       await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sender: currentSender,
+          sender: finalSender,
           text: trimmed,
         }),
       });
@@ -132,8 +139,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     } catch {}
   };
 
-  const [confirmClear, setConfirmClear] = useState(false);
-
   const handleClearChat = async () => {
     if (!isAdmin || !adminToken) return;
     if (!confirmClear) {
@@ -151,13 +156,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
       });
       setMessages([]);
     } catch {}
-  };
-
-  const saveNickname = () => {
-    const clean = tempNick.trim().slice(0, 16) || 'User';
-    setNickname(clean);
-    localStorage.setItem('whatthegoy_nick', clean);
-    setIsEditingNick(false);
   };
 
   return (
@@ -182,7 +180,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
               className={`text-[9px] px-1 border transition-colors ${
                 confirmClear ? 'border-red-500 text-red-400 bg-red-950/40' : 'border-neutral-700 text-neutral-400 hover:text-red-400'
               }`}
-              title="Clear Chat"
+              title="Clear all chat messages"
             >
               {confirmClear ? 'SURE?' : 'CLEAR'}
             </button>
@@ -194,38 +192,32 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
       {/* Body */}
       {isOpen && (
         <div className="bg-black border-x-2 border-b-2 border-white flex flex-col h-72 shadow-[3px_3px_0px_0px_#ffffff]">
-          {/* User Nick Header */}
-          <div className="border-b border-neutral-800 px-3 py-1 flex items-center justify-between text-[11px] text-neutral-400">
-            {isAdmin ? (
-              <span className="text-white font-bold">Lucas (Admin)</span>
-            ) : isEditingNick ? (
-              <div className="flex items-center gap-1 w-full">
-                <input
-                  type="text"
-                  value={tempNick}
-                  onChange={(e) => setTempNick(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && saveNickname()}
-                  maxLength={16}
-                  className="bg-neutral-900 text-white border border-neutral-600 px-1 py-0.5 text-xs flex-1 outline-none"
-                  autoFocus
-                />
-                <button 
-                  onClick={saveNickname}
-                  className="bg-white text-black px-1.5 py-0.5 font-bold hover:bg-neutral-200"
-                >
-                  OK
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between w-full">
-                <span className="truncate">Nick: <strong className="text-white">{nickname}</strong></span>
-                <button 
-                  onClick={() => { setTempNick(nickname); setIsEditingNick(true); }}
-                  className="text-neutral-400 hover:text-white underline text-[10px]"
-                >
-                  Edit
-                </button>
-              </div>
+          {/* Custom Username Field */}
+          <div className="border-b border-neutral-800 px-2.5 py-1.5 flex items-center gap-1.5 text-[11px] bg-neutral-950">
+            <span className="text-neutral-500 text-[10px] uppercase font-bold shrink-0">User:</span>
+            <input
+              type="text"
+              value={customUsername}
+              onChange={(e) => handleUsernameChange(e.target.value)}
+              placeholder="Username"
+              maxLength={20}
+              className="bg-black border border-neutral-800 focus:border-white px-1.5 py-0.5 text-xs text-white outline-none flex-1 font-mono"
+              title="Custom username for chat"
+            />
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowAdminTag(!showAdminTag)}
+                className={`text-[9px] px-1 py-0.5 border flex items-center gap-0.5 shrink-0 ${
+                  showAdminTag 
+                    ? 'border-white bg-white text-black font-bold' 
+                    : 'border-neutral-800 text-neutral-500 hover:text-white'
+                }`}
+                title="Toggle Admin badge on your chat messages"
+              >
+                <Shield className="w-2.5 h-2.5" />
+                <span>TAG</span>
+              </button>
             )}
           </div>
 
@@ -237,7 +229,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
               </div>
             ) : (
               messages.map((msg) => {
-                const isMsgAdmin = msg.sender.includes('(Admin)') || msg.sender === 'Lucashendsbee';
+                const isMsgAdmin = msg.sender.includes('[Admin]');
                 return (
                   <div key={msg.id} className="flex items-start justify-between group gap-1 text-[11px] leading-snug">
                     <div className="break-words flex-1">
