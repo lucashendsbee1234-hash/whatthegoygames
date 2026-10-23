@@ -122,8 +122,7 @@ function checkAdminCredentials(rawUsername: any, rawPassword: any): boolean {
 
   const userMatches = validUsers.includes(user);
   const passMatches = validPasses.includes(pass.toLowerCase()) || 
-                      pass === 'Hendsbee2011?' || 
-                      pass === 'Hendsbee2011';
+                      pass === 'passwordforadmin';
 
   return userMatches && passMatches;
 }
