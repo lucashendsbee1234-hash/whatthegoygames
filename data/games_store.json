@@ -1,0 +1,10 @@
+{
+  "retro_bowl.html": {
+    "filename": "retro_bowl.html",
+    "title": "Retro Bowl",
+    "content": "<!DOCTYPE html><html><head><title>Retro Bowl</title></head><body style=\"background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;\"><h1>RETRO BOWL LIVE</h1></body></html>",
+    "imageUrl": "https://res.cloudinary.com/oeweu9pq/image/upload/v1792544577/images_rmjw0a.jpg",
+    "size": 230,
+    "updatedAt": 1792770019504.5188
+  }
+}

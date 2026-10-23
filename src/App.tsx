@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Plus, ShieldAlert, Play, Trash2, LogIn, LogOut, ExternalLink, Image as ImageIcon, GraduationCap } from 'lucide-react';
+import { Search, Plus, ShieldAlert, Play, Trash2, LogIn, LogOut, ExternalLink, Image as ImageIcon, Globe } from 'lucide-react';
 import { FakeGoogleDoc } from './components/FakeGoogleDoc';
 import { LiveChat } from './components/LiveChat';
 import { GamePlayerModal } from './components/GamePlayerModal';
 import { AddGameModal } from './components/AddGameModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { EditPhotoModal } from './components/EditPhotoModal';
-import { SchoolWebsite } from './components/SchoolWebsite';
+import { SkywardPortal } from './components/SkywardPortal';
 
 interface Game {
   id: string;
@@ -53,10 +53,13 @@ export default function App() {
     }
   }, []);
 
-  // Fetch games
+  // Fetch games with cache-busting to guarantee cross-device fresh state
   const fetchGames = useCallback(async () => {
     try {
-      const res = await fetch('/api/games');
+      const res = await fetch(`/api/games?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.games)) {
@@ -69,11 +72,32 @@ export default function App() {
   // Live cross-device sync: SSE + frequent poll fallback
   useEffect(() => {
     fetchGames();
-    const interval = setInterval(fetchGames, 2500);
+    const interval = setInterval(fetchGames, 2000);
 
     let es: EventSource | null = null;
     try {
       es = new EventSource('/api/chat/stream');
+      
+      es.addEventListener('init', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.games && Array.isArray(data.games)) {
+            setGames(data.games);
+          }
+        } catch {}
+      });
+
+      es.addEventListener('games_sync', (e: MessageEvent) => {
+        try {
+          const list = JSON.parse(e.data);
+          if (Array.isArray(list)) {
+            setGames(list);
+          }
+        } catch {
+          fetchGames();
+        }
+      });
+
       es.addEventListener('game_added', (e: MessageEvent) => {
         try {
           const game: Game = JSON.parse(e.data);
@@ -82,6 +106,7 @@ export default function App() {
           fetchGames();
         }
       });
+
       es.addEventListener('game_updated', (e: MessageEvent) => {
         try {
           const updated: Game = JSON.parse(e.data);
@@ -90,6 +115,7 @@ export default function App() {
           fetchGames();
         }
       });
+
       es.addEventListener('game_deleted', (e: MessageEvent) => {
         try {
           const { filename } = JSON.parse(e.data);
@@ -177,10 +203,11 @@ export default function App() {
 
   if (!isUnlocked) {
     return (
-      <SchoolWebsite
+      <SkywardPortal
         onUnlock={() => {
           setIsUnlocked(true);
           sessionStorage.setItem('wtg_unlocked', 'true');
+          fetchGames();
         }}
       />
     );
@@ -214,17 +241,17 @@ export default function App() {
                 </button>
               )}
 
-              {/* Cloak / Lock Back to School Website */}
+              {/* Cloak / Lock Back to Skyward Portal */}
               <button
                 onClick={() => {
                   setIsUnlocked(false);
                   sessionStorage.removeItem('wtg_unlocked');
                 }}
                 className="flex items-center gap-1.5 border border-neutral-700 px-2.5 py-1 text-xs text-neutral-400 hover:text-white hover:border-white transition-colors"
-                title="Cloak back to School Website (F2)"
+                title="Cloak back to Skyward Portal (F2)"
               >
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">SCHOOL</span>
+                <Globe className="w-3.5 h-3.5 text-[#00c2e8]" />
+                <span className="hidden sm:inline font-bold">SKYWARD</span>
               </button>
 
               {/* Panic Button */}

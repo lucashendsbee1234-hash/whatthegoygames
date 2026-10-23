@@ -9,12 +9,14 @@ import { createServer as createViteServer } from 'vite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+process.env.DISABLE_HMR = 'true';
 const PORT = 3000;
 const isProd = process.env.NODE_ENV === 'production';
 const gamesDir = path.resolve(__dirname, 'games');
 const dataDir = path.resolve(__dirname, 'data');
 const chatFile = path.resolve(dataDir, 'chat_messages.json');
 const gamesMetaFile = path.resolve(dataDir, 'games_meta.json');
+const gamesStoreFile = path.resolve(dataDir, 'games_store.json');
 
 // Ensure directories exist
 if (!fs.existsSync(gamesDir)) {
@@ -22,6 +24,40 @@ if (!fs.existsSync(gamesDir)) {
 }
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
+}
+
+interface StoredGame {
+  filename: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  size: number;
+  updatedAt: number;
+}
+
+// Persistent game store to ensure games stay synced across all devices and server reboots
+let gamesStore: Record<string, StoredGame> = {};
+try {
+  if (fs.existsSync(gamesStoreFile)) {
+    gamesStore = JSON.parse(fs.readFileSync(gamesStoreFile, 'utf-8'));
+    // Ensure all stored games are written to /games folder for static access
+    for (const [fname, g] of Object.entries(gamesStore)) {
+      const p = path.join(gamesDir, fname);
+      if (!fs.existsSync(p) && g.content) {
+        fs.writeFileSync(p, g.content, 'utf-8');
+      }
+    }
+  }
+} catch {
+  gamesStore = {};
+}
+
+function persistGamesStore() {
+  try {
+    fs.writeFileSync(gamesStoreFile, JSON.stringify(gamesStore, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save games store:', err);
+  }
 }
 
 // Game metadata (e.g. photos, custom thumbnails)
@@ -128,6 +164,55 @@ function getGameImage(filename: string, fullPath: string): string {
   return '';
 }
 
+// Master synchronized games list across all devices
+function getAllGamesList() {
+  if (!fs.existsSync(gamesDir)) {
+    fs.mkdirSync(gamesDir, { recursive: true });
+  }
+
+  // Scan /games directory for any manual or newly added files
+  try {
+    const files = fs.readdirSync(gamesDir);
+    let changed = false;
+    for (const filename of files) {
+      if (filename.toLowerCase().endsWith('.html') && !gamesStore[filename]) {
+        const fullPath = path.join(gamesDir, filename);
+        try {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const stat = fs.statSync(fullPath);
+          const title = getGameTitle(filename, fullPath);
+          const imageUrl = getGameImage(filename, fullPath);
+          gamesStore[filename] = {
+            filename,
+            title,
+            content,
+            imageUrl,
+            size: stat.size,
+            updatedAt: stat.mtimeMs,
+          };
+          changed = true;
+        } catch {}
+      }
+    }
+    if (changed) {
+      persistGamesStore();
+    }
+  } catch {}
+
+  const list = Object.values(gamesStore).map(g => ({
+    id: g.filename,
+    filename: g.filename,
+    title: g.title,
+    url: `/games/${encodeURIComponent(g.filename)}`,
+    imageUrl: g.imageUrl || gamesMeta[g.filename]?.imageUrl || '',
+    size: g.size,
+    updatedAt: g.updatedAt,
+  }));
+
+  list.sort((a, b) => b.updatedAt - a.updatedAt);
+  return list;
+}
+
 // Admin validation middleware
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -197,38 +282,11 @@ async function startServer() {
   // --- Games API ---
   app.get('/api/games', (req: Request, res: Response) => {
     try {
-      if (!fs.existsSync(gamesDir)) {
-        fs.mkdirSync(gamesDir, { recursive: true });
-      }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
 
-      const files = fs.readdirSync(gamesDir);
-      const htmlFiles = files.filter(f => f.toLowerCase().endsWith('.html'));
-
-      const games = htmlFiles.map(filename => {
-        const fullPath = path.join(gamesDir, filename);
-        let stat;
-        try {
-          stat = fs.statSync(fullPath);
-        } catch {
-          stat = { size: 0, mtimeMs: Date.now() };
-        }
-
-        const title = getGameTitle(filename, fullPath);
-        const imageUrl = getGameImage(filename, fullPath);
-        return {
-          id: filename,
-          filename,
-          title,
-          url: `/games/${encodeURIComponent(filename)}`,
-          imageUrl,
-          size: stat.size,
-          updatedAt: stat.mtimeMs,
-        };
-      });
-
-      // Newest games first
-      games.sort((a, b) => b.updatedAt - a.updatedAt);
-
+      const games = getAllGamesList();
       res.json({ success: true, games, count: games.length });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -265,6 +323,17 @@ async function startServer() {
       const title = getGameTitle(safeName, targetPath);
       const stat = fs.statSync(targetPath);
 
+      // Persist to master games store
+      gamesStore[safeName] = {
+        filename: safeName,
+        title,
+        content,
+        imageUrl: cleanImageUrl,
+        size: stat.size,
+        updatedAt: stat.mtimeMs,
+      };
+      persistGamesStore();
+
       const gameObj = {
         id: safeName,
         filename: safeName,
@@ -277,6 +346,7 @@ async function startServer() {
 
       // Broadcast live to all devices immediately!
       broadcastSSE('game_added', gameObj);
+      broadcastSSE('games_sync', getAllGamesList());
 
       res.json({ success: true, game: gameObj });
     } catch (err: any) {
@@ -300,6 +370,11 @@ async function startServer() {
       gamesMeta[filename] = { ...gamesMeta[filename], imageUrl: cleanUrl };
       persistGamesMeta();
 
+      if (gamesStore[filename]) {
+        gamesStore[filename].imageUrl = cleanUrl;
+        persistGamesStore();
+      }
+
       const title = getGameTitle(filename, targetPath);
       const stat = fs.statSync(targetPath);
       const updatedGame = {
@@ -314,6 +389,7 @@ async function startServer() {
 
       // Broadcast live update across all devices!
       broadcastSSE('game_updated', updatedGame);
+      broadcastSSE('games_sync', getAllGamesList());
 
       res.json({ success: true, game: updatedGame });
     } catch (err: any) {
@@ -329,16 +405,22 @@ async function startServer() {
 
       if (fs.existsSync(targetPath)) {
         fs.unlinkSync(targetPath);
-        if (gamesMeta[filename]) {
-          delete gamesMeta[filename];
-          persistGamesMeta();
-        }
-        // Broadcast live to all devices immediately!
-        broadcastSSE('game_deleted', { filename });
-        res.json({ success: true });
-      } else {
-        res.status(404).json({ success: false, error: 'File not found' });
       }
+
+      if (gamesStore[filename]) {
+        delete gamesStore[filename];
+        persistGamesStore();
+      }
+
+      if (gamesMeta[filename]) {
+        delete gamesMeta[filename];
+        persistGamesMeta();
+      }
+
+      // Broadcast live to all devices immediately!
+      broadcastSSE('game_deleted', { filename });
+      broadcastSSE('games_sync', getAllGamesList());
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -412,10 +494,11 @@ async function startServer() {
     const clientId = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     sseClients.set(clientId, { id: clientId, res });
 
-    // Initial payload
+    // Initial payload with games, messages, and online count
     res.write(`event: init\ndata: ${JSON.stringify({
       messages: chatMessages.slice(-100),
       onlineCount: sseClients.size,
+      games: getAllGamesList(),
     })}\n\n`);
 
     broadcastOnlineCount();
@@ -442,6 +525,62 @@ async function startServer() {
       },
       appType: 'spa',
     });
+
+    const wsShim = `<script>
+(function() {
+  const OriginalWS = window.WebSocket;
+  if (OriginalWS) {
+    window.WebSocket = function(url, protocols) {
+      if (protocols === 'vite-hmr' || protocols === 'vite-ping' || String(url).includes('token=')) {
+        const dummy = new EventTarget();
+        dummy.readyState = 1;
+        dummy.send = function() {};
+        dummy.close = function() {};
+        setTimeout(function() {
+          dummy.dispatchEvent(new Event('open'));
+        }, 0);
+        return dummy;
+      }
+      return new OriginalWS(url, protocols);
+    };
+    window.WebSocket.prototype = OriginalWS.prototype;
+    window.WebSocket.CONNECTING = 0;
+    window.WebSocket.OPEN = 1;
+    window.WebSocket.CLOSING = 2;
+    window.WebSocket.CLOSED = 3;
+  }
+  const origErr = console.error;
+  console.error = function() {
+    for (var i = 0; i < arguments.length; i++) {
+      var s = String(arguments[i]?.stack || arguments[i]?.message || arguments[i] || '');
+      if (s.indexOf('@vite/client') !== -1 || s.indexOf('WebSocket') !== -1 || s.indexOf('failed to connect') !== -1) {
+        return;
+      }
+    }
+    origErr.apply(console, arguments);
+  };
+})();
+</script>`;
+
+    // Intercept HTML requests to ensure wsShim runs BEFORE @vite/client
+    app.use(async (req: Request, res: Response, next: NextFunction) => {
+      const accept = req.headers.accept || '';
+      if (req.method === 'GET' && (accept.includes('text/html') || req.path === '/')) {
+        try {
+          const templatePath = path.resolve(__dirname, 'index.html');
+          const template = fs.readFileSync(templatePath, 'utf-8');
+          let html = await vite.transformIndexHtml(req.originalUrl, template);
+          html = html.replace('<head>', '<head>' + wsShim);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+          return;
+        } catch (e) {
+          next(e);
+          return;
+        }
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(__dirname, 'dist');
