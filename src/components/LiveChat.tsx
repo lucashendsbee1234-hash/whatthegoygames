@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, ChevronDown, ChevronUp, Trash2, Shield } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageSquare, Send, ChevronDown, ChevronUp, Trash2, Shield, Circle } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -17,34 +17,50 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [customUsername, setCustomUsername] = useState(() => {
-    return localStorage.getItem('whatthegoy_nick') || `User_${Math.floor(100 + Math.random() * 900)}`;
+    return localStorage.getItem('whatthegoy_nick') || `Player_${Math.floor(100 + Math.random() * 900)}`;
   });
   const [showAdminTag, setShowAdminTag] = useState(false);
   const [isOpen, setIsOpen] = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cross-device live sync via SSE and polling fallback
+  // Fetch messages from server with cache-busting
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/chat/messages?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          setMessages(data.messages);
+          setIsConnected(true);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Live SSE connection with automatic reconnection
   useEffect(() => {
     let eventSource: EventSource | null = null;
+    let reconnectTimeout: any = null;
     let pollInterval: any = null;
-
-    const fetchMessages = async () => {
-      try {
-        const res = await fetch('/api/chat/messages');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && Array.isArray(data.messages)) {
-            setMessages(data.messages);
-          }
-        }
-      } catch {}
-    };
 
     const setupSSE = () => {
       try {
+        if (eventSource) {
+          eventSource.close();
+        }
+
         eventSource = new EventSource('/api/chat/stream');
+
+        eventSource.onopen = () => {
+          setIsConnected(true);
+        };
 
         eventSource.addEventListener('init', (e: MessageEvent) => {
           try {
@@ -78,21 +94,29 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
 
         eventSource.onerror = () => {
           eventSource?.close();
+          setIsConnected(false);
+          // Auto-reconnect after 2 seconds
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(setupSSE, 2500);
         };
-      } catch {}
+      } catch {
+        setIsConnected(false);
+      }
     };
 
     fetchMessages();
     setupSSE();
-    pollInterval = setInterval(fetchMessages, 2500);
+    // Frequent poll fallback to ensure 100% reliability
+    pollInterval = setInterval(fetchMessages, 2000);
 
     return () => {
       if (eventSource) eventSource.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, []);
+  }, [fetchMessages]);
 
-  // Scroll on messages change
+  // Scroll to bottom on new messages
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -108,14 +132,28 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = inputText.trim();
-    if (!trimmed) return;
+    if (!trimmed || isSending) return;
 
+    setIsSending(true);
     setInputText('');
-    const baseNick = customUsername.trim() || 'Anonymous';
+
+    const baseNick = customUsername.trim() || 'Player';
     const finalSender = isAdmin && showAdminTag ? `${baseNick} [Admin]` : baseNick;
 
+    // Temporary optimistic ID
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      sender: finalSender,
+      text: trimmed,
+      timestamp: Date.now(),
+    };
+
+    // Instant local feedback
+    setMessages(prev => [...prev, optimisticMessage].slice(-200));
+
     try {
-      await fetch('/api/chat/message', {
+      const res = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,7 +161,22 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
           text: trimmed,
         }),
       });
-    } catch {}
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.message) {
+          // Replace optimistic message with confirmed server message
+          setMessages(prev => 
+            prev.map(m => m.id === tempId ? data.message : m)
+          );
+        }
+      }
+    } catch {
+      // Keep optimistic message or retry on next poll
+      fetchMessages();
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleDeleteMessage = async (id: string) => {
@@ -159,7 +212,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-72 sm:w-80 flex flex-col font-mono text-xs select-none">
+    <div className="fixed bottom-4 right-4 z-40 w-72 sm:w-84 flex flex-col font-mono text-xs select-none">
       {/* Header */}
       <div 
         onClick={() => setIsOpen(!isOpen)}
@@ -168,6 +221,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
         <div className="flex items-center gap-2 font-bold tracking-wider">
           <MessageSquare className="w-3.5 h-3.5" />
           <span>CHAT</span>
+          <span className="flex items-center gap-1 text-[9px] text-neutral-400">
+            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
+            <span>{isConnected ? 'LIVE' : 'SYNC'}</span>
+          </span>
           {isAdmin && (
             <span className="text-[9px] bg-white text-black px-1 font-bold">ADMIN</span>
           )}
@@ -191,7 +248,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
 
       {/* Body */}
       {isOpen && (
-        <div className="bg-black border-x-2 border-b-2 border-white flex flex-col h-72 shadow-[3px_3px_0px_0px_#ffffff]">
+        <div className="bg-black border-x-2 border-b-2 border-white flex flex-col h-76 shadow-[3px_3px_0px_0px_#ffffff]">
           {/* Custom Username Field */}
           <div className="border-b border-neutral-800 px-2.5 py-1.5 flex items-center gap-1.5 text-[11px] bg-neutral-950">
             <span className="text-neutral-500 text-[10px] uppercase font-bold shrink-0">User:</span>
@@ -208,7 +265,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
               <button
                 type="button"
                 onClick={() => setShowAdminTag(!showAdminTag)}
-                className={`text-[9px] px-1 py-0.5 border flex items-center gap-0.5 shrink-0 ${
+                className={`text-[9px] px-1 py-0.5 border flex items-center gap-0.5 shrink-0 cursor-pointer ${
                   showAdminTag 
                     ? 'border-white bg-white text-black font-bold' 
                     : 'border-neutral-800 text-neutral-500 hover:text-white'
@@ -225,7 +282,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
           <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 select-text">
             {messages.length === 0 ? (
               <div className="h-full flex items-center justify-center text-neutral-600 text-xs">
-                No messages yet.
+                No messages yet. Say hi!
               </div>
             ) : (
               messages.map((msg) => {
@@ -233,7 +290,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
                 return (
                   <div key={msg.id} className="flex items-start justify-between group gap-1 text-[11px] leading-snug">
                     <div className="break-words flex-1">
-                      <span className={`font-bold mr-1 ${isMsgAdmin ? 'text-white underline' : 'text-neutral-300'}`}>
+                      <span className={`font-bold mr-1 ${isMsgAdmin ? 'text-white underline font-mono' : 'text-neutral-300 font-mono'}`}>
                         {msg.sender}:
                       </span>
                       <span className="text-neutral-100">{msg.text}</span>
@@ -243,7 +300,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
                     {isAdmin && (
                       <button
                         onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-40 group-hover:opacity-100 text-neutral-500 hover:text-red-400 shrink-0 p-0.5"
+                        className="opacity-40 group-hover:opacity-100 text-neutral-500 hover:text-red-400 shrink-0 p-0.5 cursor-pointer"
                         title="Delete message"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -262,14 +319,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder="Message..."
+              placeholder="Type message..."
               maxLength={300}
               className="flex-1 bg-black border border-neutral-800 focus:border-white px-2 py-1 text-white placeholder-neutral-600 outline-none text-xs"
             />
             <button
               type="submit"
-              disabled={!inputText.trim()}
-              className="bg-white text-black px-2.5 py-1 font-bold text-xs hover:bg-neutral-200 disabled:opacity-30"
+              disabled={!inputText.trim() || isSending}
+              className="bg-white text-black px-2.5 py-1 font-bold text-xs hover:bg-neutral-200 disabled:opacity-30 cursor-pointer"
             >
               <Send className="w-3 h-3" />
             </button>

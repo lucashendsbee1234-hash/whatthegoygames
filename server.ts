@@ -467,10 +467,14 @@ async function startServer() {
 
   // --- Live Chat API ---
   app.get('/api/chat/messages', (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.json({ success: true, messages: chatMessages });
   });
 
   app.post('/api/chat/message', (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     const { sender, text } = req.body;
     const cleanSender = String(sender || 'Anonymous').trim().slice(0, 20);
     const cleanText = String(text || '').trim().slice(0, 400);
