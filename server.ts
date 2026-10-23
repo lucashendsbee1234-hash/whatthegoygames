@@ -86,7 +86,7 @@ interface ChatMessage {
 }
 
 const tokensFile = path.resolve(dataDir, 'admin_tokens.json');
-const MASTER_ADMIN_TOKEN = 'wtg_master_lucas_hendsbee_2026';
+const MASTER_ADMIN_TOKEN = 'drrtuiodrtduiivfgjxnflgk';
 
 // Persistent active admin tokens
 const activeAdminTokens = new Set<string>([MASTER_ADMIN_TOKEN]);
