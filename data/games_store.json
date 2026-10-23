@@ -6,5 +6,29 @@
     "imageUrl": "https://res.cloudinary.com/oeweu9pq/image/upload/v1792544577/images_rmjw0a.jpg",
     "size": 230,
     "updatedAt": 1792770019504.5188
+  },
+  "2048.html": {
+    "filename": "2048.html",
+    "title": "2048",
+    "content": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>2048</title><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{background:#111;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0}#grid{display:grid;grid-template-columns:repeat(4,70px);grid-gap:10px;background:#222;padding:10px;border-radius:6px}.cell{width:70px;height:70px;background:#333;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:bold;border-radius:4px}.c2{background:#eee4da;color:#776e65}.c4{background:#ede0c8;color:#776e65}.c8{background:#f2b179;color:#fff}.c16{background:#f59563;color:#fff}.c32{background:#f67c5f;color:#fff}.c64{background:#f65e3b;color:#fff}.c128{background:#edcf72;color:#fff}.c256{background:#edcc61;color:#fff}.c512{background:#edc850;color:#fff}.c1024{background:#edc53f;color:#fff}.c2048{background:#edc22e;color:#fff}#score{font-size:20px;margin-bottom:15px;font-family:monospace}</style></head><body><div id=\"score\">SCORE: <span id=\"s\">0</span></div><div id=\"grid\"></div><p style=\"font-size:12px;color:#888;margin-top:15px\">Use Arrow Keys or Swipe to play</p><script>let b=Array(16).fill(0),sc=0;function sp(){let e=[];b.forEach((v,i)=>{if(!v)e.push(i)});if(e.length){b[e[Math.floor(Math.random()*e.length)]]=Math.random()<0.9?2:4;}}function d(){let g=document.getElementById(\"grid\");g.innerHTML=\"\";b.forEach(v=>{let d=document.createElement(\"div\");d.className=\"cell \"+(v?\"c\"+v:\"\");d.innerText=v||\"\";g.appendChild(d);});document.getElementById(\"s\").innerText=sc;}function slide(r){let f=r.filter(v=>v);for(let i=0;i<f.length-1;i++){if(f[i]===f[i+1]){f[i]*=2;sc+=f[i];f.splice(i+1,1);}}while(f.length<4)f.push(0);return f;}function mv(dir){let old=[...b];if(dir===\"ArrowLeft\"||dir===\"ArrowRight\"){for(let i=0;i<4;i++){let r=b.slice(i*4,i*4+4);if(dir===\"ArrowRight\")r.reverse();r=slide(r);if(dir===\"ArrowRight\")r.reverse();for(let j=0;j<4;j++)b[i*4+j]=r[j];}}else{for(let j=0;j<4;j++){let c=[b[j],b[j+4],b[j+8],b[j+12]];if(dir===\"ArrowDown\")c.reverse();c=slide(c);if(dir===\"ArrowDown\")c.reverse();for(let i=0;i<4;i++)b[i*4+j]=c[i];}}if(old.some((v,i)=>v!==b[i])){sp();d();}}window.addEventListener(\"keydown\",e=>{if([\"ArrowUp\",\"ArrowDown\",\"ArrowLeft\",\"ArrowRight\"].includes(e.key)){e.preventDefault();mv(e.key);}});sp();sp();d();</script></body></html>",
+    "imageUrl": "",
+    "size": 2395,
+    "updatedAt": 1792777800349.888
+  },
+  "flappy_bird.html": {
+    "filename": "flappy_bird.html",
+    "title": "Flappy Bird",
+    "content": "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Flappy Bird</title><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>body{background:#000;color:#fff;margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;overflow:hidden;font-family:sans-serif}canvas{border:2px solid #fff;background:#70c5ce}</style></head><body><canvas id=\"c\" width=\"320\" height=\"480\"></canvas><p style=\"font-size:12px;color:#aaa\">Press Space or Tap to Jump</p><script>const c=document.getElementById(\"c\"),ctx=c.getContext(\"2d\");let b={x:50,y:200,vy:0,g:0.25,j:-5.5,r:12},p=[],f=0,sc=0,over=false;function jump(){if(over){b.y=200;b.vy=0;p=[];sc=0;f=0;over=false;return;}b.vy=b.j;}window.addEventListener(\"keydown\",e=>{if(e.code===\"Space\"){e.preventDefault();jump();}});window.addEventListener(\"click\",jump);function loop(){f++;ctx.fillStyle=\"#70c5ce\";ctx.fillRect(0,0,c.width,c.height);if(!over){b.vy+=b.g;b.y+=b.vy;if(f%90===0){let gap=110,top=Math.floor(Math.random()*(c.height-gap-100))+40;p.push({x:c.width,top,bot:c.height-top-gap});}}ctx.fillStyle=\"#73bf2e\";p.forEach(pipe=>{if(!over)pipe.x-=2;ctx.fillRect(pipe.x,0,45,pipe.top);ctx.fillRect(pipe.x,c.height-pipe.bot,45,pipe.bot);if(!over&&b.x+b.r>pipe.x&&b.x-b.r<pipe.x+45){if(b.y-b.r<pipe.top||b.y+b.r>c.height-pipe.bot)over=true;}if(pipe.x===50&&!over)sc++;});p=p.filter(pipe=>pipe.x>-50);if(b.y+b.r>=c.height||b.y-b.r<=0)over=true;ctx.fillStyle=\"#f4d03f\";ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();ctx.fillStyle=\"#fff\";ctx.font=\"bold 20px monospace\";ctx.fillText(\"SCORE: \"+sc,10,30);if(over){ctx.fillStyle=\"rgba(0,0,0,0.6)\";ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle=\"#fff\";ctx.font=\"bold 24px monospace\";ctx.textAlign=\"center\";ctx.fillText(\"GAME OVER\",c.width/2,c.height/2-10);ctx.font=\"14px monospace\";ctx.fillText(\"TAP OR SPACE TO RETRY\",c.width/2,c.height/2+25);ctx.textAlign=\"start\";}requestAnimationFrame(loop);}loop();</script></body></html>",
+    "imageUrl": "",
+    "size": 1974,
+    "updatedAt": 1792777800349.9478
+  },
+  "slope.html": {
+    "filename": "slope.html",
+    "title": "Slope 3D",
+    "content": "<!DOCTYPE html><html><head><title>Slope 3D</title></head><body><h1>Slope 3D</h1></body></html>",
+    "imageUrl": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80",
+    "size": 94,
+    "updatedAt": 1792777840256.9543
   }
 }

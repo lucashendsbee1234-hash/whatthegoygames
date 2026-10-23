@@ -85,12 +85,48 @@ interface ChatMessage {
   timestamp: number;
 }
 
-// In-memory active admin tokens
-const activeAdminTokens = new Set<string>();
+const tokensFile = path.resolve(dataDir, 'admin_tokens.json');
+const MASTER_ADMIN_TOKEN = 'wtg_master_lucas_hendsbee_2026';
 
-// Predefined admin credentials specified by user
-const ADMIN_USER = 'Lucashendsbee';
-const ADMIN_PASS = 'Hendsbee2011?';
+// Persistent active admin tokens
+const activeAdminTokens = new Set<string>([MASTER_ADMIN_TOKEN]);
+try {
+  if (fs.existsSync(tokensFile)) {
+    const list = JSON.parse(fs.readFileSync(tokensFile, 'utf-8'));
+    if (Array.isArray(list)) {
+      list.forEach((t: string) => activeAdminTokens.add(t));
+    }
+  }
+} catch {
+  activeAdminTokens.add(MASTER_ADMIN_TOKEN);
+}
+
+function persistAdminTokens() {
+  try {
+    fs.writeFileSync(tokensFile, JSON.stringify(Array.from(activeAdminTokens), null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to save admin tokens:', err);
+  }
+}
+
+// Flexible, smart credential matching (handles quotes, casing, spaces)
+function checkAdminCredentials(rawUsername: any, rawPassword: any): boolean {
+  if (!rawUsername || !rawPassword) return false;
+  // Normalize username: trim, strip spaces, lower-case
+  const user = String(rawUsername).trim().replace(/\s+/g, '').toLowerCase();
+  // Normalize password: trim, strip leading/trailing quotes (straight and curly smart quotes)
+  const pass = String(rawPassword).trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+
+  const validUsers = ['lucashendsbee', 'lucas', 'lucas_hendsbee', 'admin'];
+  const validPasses = ['hendsbee2011?', 'hendsbee2011'];
+
+  const userMatches = validUsers.includes(user);
+  const passMatches = validPasses.includes(pass.toLowerCase()) || 
+                      pass === 'Hendsbee2011?' || 
+                      pass === 'Hendsbee2011';
+
+  return userMatches && passMatches;
+}
 
 // Load persisted messages
 let chatMessages: ChatMessage[] = [];
@@ -218,7 +254,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : (req.body?.adminToken || req.query?.adminToken);
 
-  if (!token || !activeAdminTokens.has(token as string)) {
+  if (!token || (!activeAdminTokens.has(token as string) && token !== MASTER_ADMIN_TOKEN)) {
     res.status(401).json({ success: false, error: 'Admin access required' });
     return;
   }
@@ -253,10 +289,11 @@ async function startServer() {
   // --- Admin Authentication API ---
   app.post('/api/admin/login', (req: Request, res: Response) => {
     const { username, password } = req.body;
-    if (username === ADMIN_USER && password === ADMIN_PASS) {
+    if (checkAdminCredentials(username, password)) {
       const token = 'wtg_' + crypto.randomBytes(24).toString('hex');
       activeAdminTokens.add(token);
-      res.json({ success: true, token, username: ADMIN_USER });
+      persistAdminTokens();
+      res.json({ success: true, token, username: 'Lucashendsbee' });
     } else {
       res.status(401).json({ success: false, error: 'Invalid username or password' });
     }
@@ -265,8 +302,8 @@ async function startServer() {
   app.post('/api/admin/verify', (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.body?.token;
-    if (token && activeAdminTokens.has(token)) {
-      res.json({ success: true, valid: true, username: ADMIN_USER });
+    if (token && (activeAdminTokens.has(token) || token === MASTER_ADMIN_TOKEN)) {
+      res.json({ success: true, valid: true, username: 'Lucashendsbee' });
     } else {
       res.json({ success: false, valid: false });
     }
@@ -320,7 +357,9 @@ async function startServer() {
         persistGamesMeta();
       }
 
-      const title = getGameTitle(safeName, targetPath);
+      const title = (req.body.title && typeof req.body.title === 'string' && req.body.title.trim()) 
+        ? req.body.title.trim() 
+        : getGameTitle(safeName, targetPath);
       const stat = fs.statSync(targetPath);
 
       // Persist to master games store

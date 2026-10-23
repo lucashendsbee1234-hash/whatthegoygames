@@ -405,6 +405,7 @@ export default function App() {
             onClose={() => setIsAddModalOpen(false)}
             onGameAdded={(newGame) => {
               setGames(prev => [newGame, ...prev.filter(g => g.filename !== newGame.filename)]);
+              fetchGames();
             }}
           />
         )}

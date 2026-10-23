@@ -18,10 +18,11 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
     setLoading(true);
 
     try {
+      const cleanPass = password.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password }),
+        body: JSON.stringify({ username: username.trim(), password: cleanPass }),
       });
 
       const data = await res.json();

@@ -75,16 +75,35 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
     setShowSearch(false);
   };
 
-  // Login modal submit (Hidden Unlock Trigger #2)
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Login modal submit (Unlock + Admin Auth)
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanUser = loginUsername.trim();
+    const cleanPass = loginPassword.trim();
+
     if (
-      loginUsername.trim().toLowerCase() === 'playgamesskib' ||
-      loginPassword.trim().toLowerCase() === 'playgamesskib'
+      cleanUser.toLowerCase() === 'playgamesskib' ||
+      cleanPass.toLowerCase() === 'playgamesskib'
     ) {
       onUnlock();
       return;
     }
+
+    // Direct Admin Sign In from Skyward Login modal
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.token) {
+        localStorage.setItem('wtg_admin_token', data.token);
+        onUnlock();
+        return;
+      }
+    } catch {}
+
     setLoginError(true);
     setTimeout(() => setLoginError(false), 3000);
   };
