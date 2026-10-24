@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Search, Play, ArrowRight, LogIn, ChevronDown, X, Lock, CheckCircle2, Shield
+  Search, Play, ArrowRight, LogIn, ChevronDown, X, Lock
 } from 'lucide-react';
 
 interface SkywardPortalProps {
@@ -66,7 +66,8 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
   // Search submit (Hidden Unlock Trigger #1)
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim().toLowerCase() === 'playgamesskib') {
+    const q = searchQuery.trim().toLowerCase();
+    if (q === 'playgamesskib' || q === 'lucas' || q === 'lucashendsbee') {
       onUnlock();
       return;
     }
@@ -79,7 +80,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanUser = loginUsername.trim();
-    const cleanPass = loginPassword.trim();
+    const cleanPass = loginPassword.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
 
     if (
       cleanUser.toLowerCase() === 'playgamesskib' ||
@@ -96,8 +97,8 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: cleanUser, password: cleanPass }),
       });
-      const data = await res.json();
-      if (res.ok && data.success && data.token) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.token) {
         localStorage.setItem('wtg_admin_token', data.token);
         onUnlock();
         return;
@@ -113,14 +114,19 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
       {/* 1. TOP NAV BAR: Exact Royal Blue (#00539f) with Skyward Logo, Log in, and Get started */}
       <header className="bg-[#00539f] text-white">
         <div className="w-full px-4 sm:px-8 py-3 sm:py-3.5 flex items-center justify-between">
-          {/* Exact Skyward Logo */}
-          <div className="flex items-center">
-            <img 
-              src="/assets/skyward_logo.png" 
-              alt="Skyward" 
-              className="h-10 sm:h-12 w-auto object-contain cursor-pointer"
-              onClick={() => {}}
-            />
+          {/* Authentic Vector SVG Skyward Logo: 100% self-contained and crystal clear */}
+          <div className="flex items-center cursor-pointer">
+            <svg viewBox="0 0 160 48" className="h-10 sm:h-12 w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Flight swooshes */}
+              <path d="M12 28 C28 14 56 12 86 16 C60 19 36 24 16 34 Z" fill="white" />
+              <path d="M24 24 C40 12 66 10 96 14 C72 17 50 21 30 30 Z" fill="white" opacity="0.85" />
+              <path d="M38 20 C54 11 78 9 106 13 C84 15 64 19 46 26 Z" fill="white" opacity="0.7" />
+              <path d="M52 16 C68 9 90 8 116 12 C96 14 78 17 60 22 Z" fill="white" opacity="0.55" />
+              {/* SKYWARD® Text */}
+              <text x="12" y="44" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" fontSize="19" fontWeight="900" fill="white" letterSpacing="1.5">SKYWARD</text>
+              <circle cx="118" cy="32" r="3.5" stroke="white" strokeWidth="0.8" fill="none" />
+              <text x="116.5" y="34.5" fontFamily="sans-serif" fontSize="4.5" fill="white" fontWeight="bold">R</text>
+            </svg>
           </div>
 
           {/* Right Action Items */}
@@ -238,16 +244,16 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
         )}
       </header>
 
-      {/* 3. HERO SECTION: Exact Replica of Skyward Classroom & Typography */}
-      <section className="relative w-full bg-[#1b263b] overflow-hidden flex-1 min-h-[520px] sm:min-h-[580px] lg:min-h-[640px] flex items-center">
-        {/* Exact cropped background image of the teacher & student */}
+      {/* 3. HERO SECTION: Authentic Skyward Classroom & Headline */}
+      <section className="relative w-full bg-gradient-to-r from-[#0d233e] via-[#16365c] to-[#122b49] overflow-hidden flex-1 min-h-[520px] sm:min-h-[580px] lg:min-h-[640px] flex items-center">
+        {/* Crisp Classroom imagery */}
         <div 
-          className="absolute inset-0 bg-cover bg-center sm:bg-right-top"
-          style={{ backgroundImage: `url('/assets/skyward_hero_bg.png')` }}
+          className="absolute inset-0 bg-cover bg-center sm:bg-right-top opacity-60 mix-blend-luminosity"
+          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1600&q=85')` }}
         />
 
         {/* Gradient overlay for perfect readability matching the screenshot */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent sm:from-black/75 sm:via-black/35 sm:to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0d233e]/95 via-[#0d233e]/75 to-transparent sm:from-[#0d233e]/90 sm:via-[#0d233e]/40 sm:to-transparent" />
 
         {/* Hero Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-12 py-12 lg:py-20 w-full">
@@ -329,7 +335,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
                   type="text"
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="e.g. DIS-042 or Username"
+                  placeholder="e.g. lucashendsbee or District ID"
                   className="w-full bg-slate-50 border border-slate-300 focus:border-[#00539f] focus:bg-white px-3 py-2 text-xs sm:text-sm rounded outline-none"
                   autoFocus
                 />
@@ -364,7 +370,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
                 </button>
                 <button
                   type="submit"
-                  className="bg-[#00539f] hover:bg-[#004280] text-white font-bold text-xs sm:text-sm px-5 py-2 rounded shadow-xs transition-colors"
+                  className="bg-[#00539f] hover:bg-[#004280] text-white font-bold text-xs sm:text-sm px-5 py-2 rounded shadow-xs transition-colors cursor-pointer"
                 >
                   Log In
                 </button>
@@ -400,7 +406,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
               <div className="pt-2 border-t border-slate-200 flex justify-end">
                 <button
                   onClick={() => setShowStoryModal(false)}
-                  className="bg-[#00539f] text-white px-4 py-1.5 rounded text-xs font-bold"
+                  className="bg-[#00539f] text-white px-4 py-1.5 rounded text-xs font-bold cursor-pointer"
                 >
                   Close
                 </button>

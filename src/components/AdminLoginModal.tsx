@@ -25,9 +25,15 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
         body: JSON.stringify({ username: username.trim(), password: cleanPass }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Invalid credentials');
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || 'Invalid credentials');
       }
 
       onSuccess(data.token, data.username);

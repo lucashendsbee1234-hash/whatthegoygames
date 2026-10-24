@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import fs from 'fs';
-import { put } from '@vercel/blob';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
@@ -330,74 +329,74 @@ async function startServer() {
     }
   });
 
- // Upload a new .html game (ADMIN ONLY)
-app.post('/api/games/upload', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const { filename, content, imageUrl } = req.body;
+  // Upload a new .html game (ADMIN ONLY) - Powered by AI Studio Server
+  app.post('/api/games/upload', requireAdmin, (req: Request, res: Response) => {
+    try {
+      const { filename, content, imageUrl } = req.body;
 
-    if (!filename || typeof filename !== 'string') {
-      res.status(400).json({ success: false, error: 'Filename is required' });
-      return;
+      if (!filename || typeof filename !== 'string') {
+        res.status(400).json({ success: false, error: 'Filename is required' });
+        return;
+      }
+
+      if (!content || typeof content !== 'string') {
+        res.status(400).json({ success: false, error: 'HTML content is required' });
+        return;
+      }
+
+      let safeName = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+      if (!safeName.toLowerCase().endsWith('.html') && !safeName.toLowerCase().endsWith('.htm')) {
+        safeName += '.html';
+      }
+
+      const targetPath = path.join(gamesDir, safeName);
+      fs.writeFileSync(targetPath, content, 'utf-8');
+
+      const cleanImageUrl = String(imageUrl || '').trim();
+      const title = (typeof req.body.title === 'string' && req.body.title.trim())
+        ? req.body.title.trim()
+        : getGameTitle(safeName, targetPath);
+
+      const stat = fs.statSync(targetPath);
+      const gameUrl = `/games/${encodeURIComponent(safeName)}`;
+
+      if (cleanImageUrl) {
+        gamesMeta[safeName] = {
+          ...gamesMeta[safeName],
+          imageUrl: cleanImageUrl,
+        };
+        persistGamesMeta();
+      }
+
+      gamesStore[safeName] = {
+        filename: safeName,
+        title,
+        content,
+        imageUrl: cleanImageUrl || getGameImage(safeName, targetPath),
+        size: stat.size,
+        updatedAt: stat.mtimeMs,
+      };
+      persistGamesStore();
+
+      const gameObj = {
+        id: safeName,
+        filename: safeName,
+        title,
+        url: gameUrl,
+        imageUrl: cleanImageUrl || getGameImage(safeName, targetPath),
+        size: stat.size,
+        updatedAt: stat.mtimeMs,
+      };
+
+      // Broadcast live across all devices immediately!
+      broadcastSSE('game_added', gameObj);
+      broadcastSSE('games_sync', getAllGamesList());
+
+      res.json({ success: true, game: gameObj });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
-
-    if (!content || typeof content !== 'string') {
-      res.status(400).json({ success: false, error: 'HTML content is required' });
-      return;
-    }
-
-    let safeName = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-    if (!safeName.toLowerCase().endsWith('.html')) safeName += '.html';
-
-    const blob = await put(`games/${safeName}`, content, {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'text/html; charset=utf-8',
-      token: process.env.GAMES_BLOB_READ_WRITE_TOKEN,
-    });
-
-    const cleanImageUrl = String(imageUrl || '').trim();
-    const title = (typeof req.body.title === 'string' && req.body.title.trim())
-      ? req.body.title.trim()
-      : safeName.replace(/\.html$/i, '').replace(/[-_]/g, ' ');
-
-    const updatedAt = Date.now();
-
-    gamesMeta[safeName] = {
-      ...gamesMeta[safeName],
-      imageUrl: cleanImageUrl,
-      url: blob.url,
-    };
-    persistGamesMeta();
-
-    gamesStore[safeName] = {
-      filename: safeName,
-      title,
-      content,
-      imageUrl: cleanImageUrl,
-      url: blob.url,
-      size: Buffer.byteLength(content, 'utf8'),
-      updatedAt,
-    };
-    persistGamesStore();
-
-    const gameObj = {
-      id: safeName,
-      filename: safeName,
-      title,
-      url: blob.url,
-      imageUrl: cleanImageUrl,
-      size: Buffer.byteLength(content, 'utf8'),
-      updatedAt,
-    };
-
-    broadcastSSE('game_added', gameObj);
-    broadcastSSE('games_sync', getAllGamesList());
-
-    res.json({ success: true, game: gameObj });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+  });
 
 
   // Update game photo/thumbnail URL (ADMIN ONLY)

@@ -4,5 +4,17 @@
   },
   "slope.html": {
     "imageUrl": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80"
+  },
+  "retrobowl.html": {
+    "imageUrl": "https://res.cloudinary.com/oeweu9pq/image/upload/v1792544577/images_rmjw0a.jpg"
+  },
+  "GTA3.html": {
+    "imageUrl": "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=500&q=80"
+  },
+  "flappy_bird.html": {
+    "imageUrl": "https://images.unsplash.com/photo-1579373903781-fd5c0c30c4cd?w=500&q=80"
+  },
+  "2048.html": {
+    "imageUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&q=80"
   }
 }

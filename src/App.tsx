@@ -24,6 +24,7 @@ export default function App() {
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [isPanic, setIsPanic] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(() => sessionStorage.getItem('wtg_unlocked') === 'true');
+  const [liveToast, setLiveToast] = useState<string | null>(null);
   
   // Admin auth
   const [isAdmin, setIsAdmin] = useState(false);
@@ -102,6 +103,8 @@ export default function App() {
         try {
           const game: Game = JSON.parse(e.data);
           setGames(prev => [game, ...prev.filter(g => g.filename !== game.filename)]);
+          setLiveToast(`🎮 New Game Added: "${game.title}"! Live for everyone.`);
+          setTimeout(() => setLiveToast(null), 5000);
         } catch {
           fetchGames();
         }
@@ -289,6 +292,19 @@ export default function App() {
 
         {/* Content */}
         <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6 flex flex-col gap-5">
+          {/* Live Notification Toast */}
+          {liveToast && (
+            <div className="bg-emerald-950/60 border border-emerald-500 text-emerald-300 px-3.5 py-2 text-xs flex items-center justify-between shadow-md">
+              <span className="font-bold">{liveToast}</span>
+              <button 
+                onClick={() => setLiveToast(null)} 
+                className="text-emerald-400 hover:text-white font-bold ml-2 text-xs p-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Search Bar */}
           <div className="relative max-w-sm">
             <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -316,19 +332,25 @@ export default function App() {
                 >
                   {/* Game Photo / Banner */}
                   {game.imageUrl ? (
-                    <div className="w-full h-28 sm:h-32 bg-neutral-950 overflow-hidden relative border-b border-neutral-850">
+                    <div className="w-full h-28 sm:h-32 bg-neutral-950 overflow-hidden relative border-b border-neutral-800">
                       <img
                         src={game.imageUrl}
                         alt={game.title}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
+                          // Clean fallback instead of blank card
+                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80';
                         }}
                       />
                     </div>
                   ) : (
-                    <div className="w-full h-20 bg-neutral-950 border-b border-neutral-900 flex items-center justify-center text-neutral-700 group-hover:text-neutral-400 transition-colors">
-                      <ImageIcon className="w-5 h-5 stroke-1" />
+                    <div className="w-full h-28 sm:h-32 bg-gradient-to-br from-neutral-900 to-neutral-950 border-b border-neutral-800 flex flex-col items-center justify-center p-3 text-center group-hover:border-neutral-600 transition-colors">
+                      <div className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center font-bold text-xs mb-1.5 shadow-sm">
+                        {game.title.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-[10px] text-neutral-400 font-bold tracking-wider truncate max-w-full">
+                        {game.title}
+                      </span>
                     </div>
                   )}
 
