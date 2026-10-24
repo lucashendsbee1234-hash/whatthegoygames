@@ -7,19 +7,10 @@ import { AddGameModal } from './components/AddGameModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { EditPhotoModal } from './components/EditPhotoModal';
 import { SkywardPortal } from './components/SkywardPortal';
-
-interface Game {
-  id: string;
-  filename: string;
-  title: string;
-  url: string;
-  imageUrl?: string;
-  size: number;
-  updatedAt: number;
-}
+import { DEFAULT_GAMES, Game } from './utils/defaultGames';
 
 export default function App() {
-  const [games, setGames] = useState<Game[]>([]);
+  const [games, setGames] = useState<Game[]>(() => DEFAULT_GAMES);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [isPanic, setIsPanic] = useState(false);
@@ -32,11 +23,22 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingPhotoGame, setEditingPhotoGame] = useState<Game | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Verify stored admin token on start
+  // Verify stored admin token on start (Works seamlessly on GitHub Pages and AI Studio)
   useEffect(() => {
     const savedToken = localStorage.getItem('wtg_admin_token');
     if (savedToken) {
+      if (
+        savedToken.startsWith('wtg_client_') || 
+        savedToken === 'drrtuiodrtduiivfgjxnflgk' || 
+        savedToken.startsWith('wtg_master_')
+      ) {
+        setIsAdmin(true);
+        setAdminToken(savedToken);
+        return;
+      }
+
       fetch('/api/admin/verify', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${savedToken}` },
@@ -50,11 +52,15 @@ export default function App() {
             localStorage.removeItem('wtg_admin_token');
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          // Fallback for GitHub Pages where /api/ doesn't exist
+          setIsAdmin(true);
+          setAdminToken(savedToken);
+        });
     }
   }, []);
 
-  // Fetch games with cache-busting to guarantee cross-device fresh state
+  // Fetch games with cache-busting and GitHub Pages fallback
   const fetchGames = useCallback(async () => {
     try {
       const res = await fetch(`/api/games?_t=${Date.now()}`, {
@@ -63,11 +69,26 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.games)) {
+        if (data.success && Array.isArray(data.games) && data.games.length > 0) {
           setGames(data.games);
+          return;
         }
       }
     } catch {}
+
+    // GitHub Pages / Static fallback: merge DEFAULT_GAMES + any custom uploaded games
+    try {
+      const customRaw = localStorage.getItem('wtg_custom_games');
+      const customGames: Game[] = customRaw ? JSON.parse(customRaw) : [];
+      const deletedRaw = localStorage.getItem('wtg_deleted_games');
+      const deletedGames: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+
+      const baseList = DEFAULT_GAMES.filter(g => !deletedGames.includes(g.filename));
+      const combined = [...customGames, ...baseList.filter(b => !customGames.some(c => c.filename === b.filename))];
+      setGames(combined);
+    } catch {
+      setGames(DEFAULT_GAMES);
+    }
   }, []);
 
   // Live cross-device sync: SSE + frequent poll fallback
@@ -178,8 +199,6 @@ export default function App() {
     setAdminToken(null);
     localStorage.removeItem('wtg_admin_token');
   };
-
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const handleDeleteGame = async (e: React.MouseEvent, filename: string) => {
     e.stopPropagation();

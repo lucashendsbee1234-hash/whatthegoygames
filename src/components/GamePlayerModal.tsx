@@ -1,14 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Maximize2, Minimize2, RotateCcw, ShieldAlert, ExternalLink } from 'lucide-react';
-
-interface Game {
-  id: string;
-  filename: string;
-  title: string;
-  url: string;
-  size: number;
-  updatedAt: number;
-}
+import { Game } from '../utils/defaultGames';
 
 interface GamePlayerModalProps {
   game: Game;

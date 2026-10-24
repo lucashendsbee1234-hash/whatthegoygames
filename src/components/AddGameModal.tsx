@@ -108,26 +108,55 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
     setLoading(true);
 
     try {
-      const res = await fetch('/api/games/upload', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${adminToken}`,
-        },
-        body: JSON.stringify({
-          filename: finalFilename,
-          title: title.trim() || undefined,
-          content: finalContent,
-          imageUrl: imageUrl.trim() || undefined,
-        }),
-      });
+      let res: Response | null = null;
+      let data: any = null;
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to upload game');
+      try {
+        res = await fetch('/api/games/upload', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({
+            filename: finalFilename,
+            title: title.trim() || undefined,
+            content: finalContent,
+            imageUrl: imageUrl.trim() || undefined,
+          }),
+        });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
+      } catch {}
+
+      if (res && res.ok && data?.success && data?.game) {
+        onGameAdded(data.game);
+        onClose();
+        return;
       }
 
-      onGameAdded(data.game);
+      // GitHub Pages / Static fallback:
+      const blob = new Blob([finalContent], { type: 'text/html' });
+      const blobUrl = URL.createObjectURL(blob);
+      const newGame = {
+        id: finalFilename,
+        filename: finalFilename,
+        title: title.trim() || finalFilename.replace(/\.html$/i, ''),
+        url: blobUrl,
+        imageUrl: imageUrl.trim() || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80',
+        size: finalContent.length,
+        updatedAt: Date.now(),
+      };
+
+      try {
+        const raw = localStorage.getItem('wtg_custom_games');
+        const custom: any[] = raw ? JSON.parse(raw) : [];
+        const filtered = custom.filter((g: any) => g.filename !== finalFilename);
+        localStorage.setItem('wtg_custom_games', JSON.stringify([newGame, ...filtered]));
+      } catch {}
+
+      onGameAdded(newGame);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Upload failed');

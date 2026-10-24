@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Lock } from 'lucide-react';
+import { verifyCredentialsClientSide } from '../utils/auth';
 
 interface AdminLoginModalProps {
   onClose: () => void;
@@ -19,28 +20,44 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
 
     try {
       const cleanPass = password.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          username: username.trim(), 
-          password: cleanPass 
-        }),
-      });
-
+      const cleanUser = username.trim();
+      let res: Response | null = null;
       let data: any = null;
+
       try {
-        data = await res.json();
+        res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            username: cleanUser, 
+            password: cleanPass 
+          }),
+        });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
       } catch {
-        data = null;
+        // Network error / no backend (GitHub Pages / static host)
       }
 
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.error || 'Invalid credentials');
+      // If backend responded with success
+      if (res && res.ok && data?.success) {
+        onSuccess(data.token, data.username || 'Admin');
+        onClose();
+        return;
       }
 
-      onSuccess(data.token, data.username || 'Admin');
-      onClose();
+      // If on GitHub Pages or static hosting where /api/ returned 404 or failed:
+      if (!res || res.status === 404 || res.status === 405 || !res.ok) {
+        if (verifyCredentialsClientSide(cleanUser, cleanPass)) {
+          const clientToken = 'wtg_client_' + Date.now();
+          onSuccess(clientToken, 'Lucashendsbee');
+          onClose();
+          return;
+        }
+      }
+
+      throw new Error(data?.error || 'Invalid credentials');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

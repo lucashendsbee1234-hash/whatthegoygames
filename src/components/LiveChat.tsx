@@ -27,7 +27,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch messages from server with cache-busting
+  // Fetch messages from server with cache-busting and GitHub Pages fallback
   const fetchMessages = useCallback(async () => {
     try {
       const res = await fetch(`/api/chat/messages?_t=${Date.now()}`, {
@@ -39,9 +39,24 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
         if (data.success && Array.isArray(data.messages)) {
           setMessages(data.messages);
           setIsConnected(true);
+          return;
         }
       }
     } catch {}
+
+    // GitHub Pages / Static fallback
+    try {
+      const raw = localStorage.getItem('wtg_chat_messages');
+      if (raw) {
+        const localMsgs = JSON.parse(raw);
+        if (Array.isArray(localMsgs)) {
+          setMessages(localMsgs);
+          setIsConnected(true);
+          return;
+        }
+      }
+    } catch {}
+    setIsConnected(true);
   }, []);
 
   // Live SSE connection with automatic reconnection
@@ -151,6 +166,19 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
 
     // Instant local feedback
     setMessages(prev => [...prev, optimisticMessage].slice(-200));
+
+    // Save to localStorage for GitHub Pages / static hosting
+    try {
+      const raw = localStorage.getItem('wtg_chat_messages');
+      const localMsgs = raw ? JSON.parse(raw) : [];
+      const updated = [...localMsgs, optimisticMessage].slice(-200);
+      localStorage.setItem('wtg_chat_messages', JSON.stringify(updated));
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('wtg_chat_channel');
+        bc.postMessage(optimisticMessage);
+        bc.close();
+      }
+    } catch {}
 
     try {
       const res = await fetch('/api/chat/message', {

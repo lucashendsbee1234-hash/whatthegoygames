@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, Play, ArrowRight, LogIn, ChevronDown, X, Lock
 } from 'lucide-react';
+import { verifyCredentialsClientSide } from '../utils/auth';
 
 interface SkywardPortalProps {
   onUnlock: () => void;
@@ -104,6 +105,14 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
         return;
       }
     } catch {}
+
+    // GitHub Pages / Static fallback:
+    if (verifyCredentialsClientSide(cleanUser, cleanPass)) {
+      const clientToken = 'wtg_client_' + Date.now();
+      localStorage.setItem('wtg_admin_token', clientToken);
+      onUnlock();
+      return;
+    }
 
     setLoginError(true);
     setTimeout(() => setLoginError(false), 3000);
