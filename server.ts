@@ -399,36 +399,6 @@ app.post('/api/games/upload', requireAdmin, async (req: Request, res: Response) 
   }
 });
 
-      // Persist to master games store
-      gamesStore[safeName] = {
-        filename: safeName,
-        title,
-        content,
-        imageUrl: cleanImageUrl,
-        size: stat.size,
-        updatedAt: stat.mtimeMs,
-      };
-      persistGamesStore();
-
-      const gameObj = {
-        id: safeName,
-        filename: safeName,
-        title,
-        url: `/games/${encodeURIComponent(safeName)}`,
-        imageUrl: cleanImageUrl || getGameImage(safeName, targetPath),
-        size: stat.size,
-        updatedAt: stat.mtimeMs,
-      };
-
-      // Broadcast live to all devices immediately!
-      broadcastSSE('game_added', gameObj);
-      broadcastSSE('games_sync', getAllGamesList());
-
-      res.json({ success: true, game: gameObj });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
 
   // Update game photo/thumbnail URL (ADMIN ONLY)
   app.post('/api/games/:filename/photo', requireAdmin, (req: Request, res: Response) => {
