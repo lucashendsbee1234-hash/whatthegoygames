@@ -335,7 +335,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
                   type="text"
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="e.g. lucashendsbee or District ID"
+                  placeholder="District ID or Username"
                   className="w-full bg-slate-50 border border-slate-300 focus:border-[#00539f] focus:bg-white px-3 py-2 text-xs sm:text-sm rounded outline-none"
                   autoFocus
                 />

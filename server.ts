@@ -111,13 +111,20 @@ function persistAdminTokens() {
 
 // Flexible, universally forgiving credential matching
 function checkAdminCredentials(rawUsername: any, rawPassword: any): boolean {
-  if (!rawPassword) return false;
+  if (!rawPassword && !rawUsername) return false;
 
-  // Normalize password: trim, strip quotes, lowercase, remove interior spacing
-  const pass = String(rawPassword).trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+  const user = String(rawUsername || '').trim().replace(/\s+/g, '').toLowerCase();
+  const pass = String(rawPassword || '').trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
   const passLower = pass.toLowerCase();
   const passCompact = passLower.replace(/[\s\-_]/g, '');
 
+  // 1. If username is Lucas / Lucas Hendsbee / Admin, grant instant access with any non-empty password
+  const isLucasUser = user.includes('lucas') || user.includes('hendsbee') || user === 'admin' || user === 'whatthegoy';
+  if (isLucasUser && pass.length > 0) {
+    return true;
+  }
+
+  // 2. Secret passwords that grant instant access regardless of username
   const validPasswords = [
     'passwordforadmin',
     'password_for_admin',
@@ -135,28 +142,17 @@ function checkAdminCredentials(rawUsername: any, rawPassword: any): boolean {
     'admin',
   ];
 
-  const passwordMatches = 
+  if (
     validPasswords.includes(pass) ||
     validPasswords.includes(passLower) ||
     validPasswords.includes(passCompact) ||
     passLower.startsWith('hendsbee2011') ||
-    passLower.startsWith('passwordforadmin');
+    passLower.startsWith('passwordforadmin')
+  ) {
+    return true;
+  }
 
-  if (!passwordMatches) return false;
-
-  // When a valid admin password is provided, accept any username (or variation of Lucas/Hendsbee/admin)
-  const user = String(rawUsername || '').trim().replace(/\s+/g, '').toLowerCase();
-  const userMatches = 
-    !user ||
-    user.includes('lucas') ||
-    user.includes('hendsbee') ||
-    user.includes('admin') ||
-    user.includes('whatthegoy') ||
-    user.includes('playgame') ||
-    user.includes('user') ||
-    true; // Admin password is the primary authentication
-
-  return passwordMatches && userMatches;
+  return false;
 }
 
 // Load persisted messages
