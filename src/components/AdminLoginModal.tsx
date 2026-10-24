@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Lock } from 'lucide-react';
+import { X, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface AdminLoginModalProps {
   onClose: () => void;
@@ -7,8 +7,9 @@ interface AdminLoginModalProps {
 }
 
 export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuccess }) => {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState('lucashendsbee');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +23,10 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim(), password: cleanPass }),
+        body: JSON.stringify({ 
+          username: username.trim(), 
+          password: cleanPass 
+        }),
       });
 
       let data: any = null;
@@ -53,7 +57,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
             <Lock className="w-3.5 h-3.5" />
             <span className="font-bold text-xs uppercase tracking-wider">Sign In</span>
           </div>
-          <button onClick={onClose} className="hover:text-neutral-400 p-0.5">
+          <button onClick={onClose} className="hover:text-neutral-400 p-0.5 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -65,7 +69,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
+              placeholder="lucashendsbee"
               className="w-full bg-neutral-950 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-xs text-white outline-none"
               autoFocus
               required
@@ -74,14 +78,27 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
 
           <div>
             <label className="block text-[10px] text-neutral-400 mb-1 uppercase">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-neutral-950 border border-neutral-700 focus:border-white px-2.5 py-1.5 text-xs text-white outline-none"
-              required
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="passwordforadmin or Hendsbee2011?"
+                className="w-full bg-neutral-950 border border-neutral-700 focus:border-white pl-2.5 pr-8 py-1.5 text-xs text-white outline-none"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-0.5 cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <p className="text-[9px] text-neutral-500 mt-1">
+              Supports: passwordforadmin, Hendsbee2011?, or drrtuiodrtduiivfgjxnflgk
+            </p>
           </div>
 
           {error && (
@@ -94,14 +111,14 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1 border border-neutral-700 text-neutral-400 hover:text-white text-xs"
+              className="px-3 py-1 border border-neutral-700 text-neutral-400 hover:text-white text-xs cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-white text-black px-4 py-1 font-bold text-xs hover:bg-neutral-200 disabled:opacity-40"
+              className="bg-white text-black px-4 py-1 font-bold text-xs hover:bg-neutral-200 disabled:opacity-40 cursor-pointer"
             >
               {loading ? '...' : 'Sign In'}
             </button>
