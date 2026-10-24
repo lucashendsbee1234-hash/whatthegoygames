@@ -119,7 +119,7 @@ function checkAdminCredentials(rawUsername: any, rawPassword: any): boolean {
   const pass = String(rawPassword).trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
 
   const validUsers = ['lucashendsbee', 'lucas', 'lucas_hendsbee', 'admin'];
-  const validPasses = ['hendsbee2011?', 'hendsbee2011'];
+  const validPasses = ['hendsbee2011?', 'passwordforadmin'];
 
   const userMatches = validUsers.includes(user);
   const passMatches = validPasses.includes(pass.toLowerCase()) || 
