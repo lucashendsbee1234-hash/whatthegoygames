@@ -233,12 +233,35 @@ function getAllGamesList() {
     fs.mkdirSync(gamesDir, { recursive: true });
   }
 
-  // Scan /games directory for any manual or newly added files
+  // Reload from games_store.json if it was edited on disk
   try {
-    const files = fs.readdirSync(gamesDir);
+    if (fs.existsSync(gamesStoreFile)) {
+      const diskRaw = fs.readFileSync(gamesStoreFile, 'utf-8');
+      const parsed = JSON.parse(diskRaw);
+      if (parsed && typeof parsed === 'object') {
+        gamesStore = parsed;
+      }
+    }
+  } catch {}
+
+  // Scan /games directory for files
+  try {
+    const filesOnDisk = fs.readdirSync(gamesDir).filter(f => f.toLowerCase().endsWith('.html') || f.toLowerCase().endsWith('.htm'));
     let changed = false;
-    for (const filename of files) {
-      if (filename.toLowerCase().endsWith('.html') && !gamesStore[filename]) {
+
+    // 1. Remove any games from store that no longer exist on disk
+    for (const key of Object.keys(gamesStore)) {
+      const existsOnDisk = filesOnDisk.some(f => f.toLowerCase() === key.toLowerCase());
+      if (!existsOnDisk) {
+        delete gamesStore[key];
+        changed = true;
+      }
+    }
+
+    // 2. Add any newly added files on disk into gamesStore
+    for (const filename of filesOnDisk) {
+      const storeKey = Object.keys(gamesStore).find(k => k.toLowerCase() === filename.toLowerCase());
+      if (!storeKey) {
         const fullPath = path.join(gamesDir, filename);
         try {
           const content = fs.readFileSync(fullPath, 'utf-8');
@@ -257,6 +280,7 @@ function getAllGamesList() {
         } catch {}
       }
     }
+
     if (changed) {
       persistGamesStore();
     }
@@ -478,30 +502,46 @@ async function startServer() {
     }
   });
 
-  // Delete a game (ADMIN ONLY)
+  // Delete a game (ADMIN ONLY) - Live update for the whole website
   app.delete('/api/games/:filename', requireAdmin, (req: Request, res: Response) => {
     try {
-      const filename = path.basename(req.params.filename);
-      const targetPath = path.join(gamesDir, filename);
+      const filenameParam = path.basename(req.params.filename);
+      const reqLower = filenameParam.toLowerCase();
 
-      if (fs.existsSync(targetPath)) {
-        fs.unlinkSync(targetPath);
+      // 1. Delete file on disk (case-insensitively)
+      if (fs.existsSync(gamesDir)) {
+        const files = fs.readdirSync(gamesDir);
+        for (const f of files) {
+          if (f.toLowerCase() === reqLower || f === filenameParam) {
+            try {
+              fs.unlinkSync(path.join(gamesDir, f));
+            } catch {}
+          }
+        }
       }
 
-      if (gamesStore[filename]) {
-        delete gamesStore[filename];
-        persistGamesStore();
+      // 2. Delete from gamesStore (case-insensitively)
+      for (const key of Object.keys(gamesStore)) {
+        if (key.toLowerCase() === reqLower || key === filenameParam) {
+          delete gamesStore[key];
+        }
       }
+      persistGamesStore();
 
-      if (gamesMeta[filename]) {
-        delete gamesMeta[filename];
-        persistGamesMeta();
+      // 3. Delete from gamesMeta (case-insensitively)
+      for (const key of Object.keys(gamesMeta)) {
+        if (key.toLowerCase() === reqLower || key === filenameParam) {
+          delete gamesMeta[key];
+        }
       }
+      persistGamesMeta();
 
-      // Broadcast live to all devices immediately!
-      broadcastSSE('game_deleted', { filename });
-      broadcastSSE('games_sync', getAllGamesList());
-      res.json({ success: true });
+      // 4. Broadcast live across all devices immediately!
+      const freshList = getAllGamesList();
+      broadcastSSE('game_deleted', { filename: filenameParam });
+      broadcastSSE('games_sync', freshList);
+
+      res.json({ success: true, count: freshList.length });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

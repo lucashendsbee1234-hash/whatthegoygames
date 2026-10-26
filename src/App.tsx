@@ -60,7 +60,7 @@ export default function App() {
     }
   }, []);
 
-  // Fetch games with cache-busting and GitHub Pages fallback
+  // Fetch games with cache-busting and live server sync
   const fetchGames = useCallback(async () => {
     try {
       const res = await fetch(`/api/games?_t=${Date.now()}`, {
@@ -69,7 +69,7 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.success && Array.isArray(data.games) && data.games.length > 0) {
+        if (data.success && Array.isArray(data.games)) {
           setGames(data.games);
           return;
         }
@@ -91,68 +91,103 @@ export default function App() {
     }
   }, []);
 
-  // Live cross-device sync: SSE + frequent poll fallback
+  // Live real-time sync across all devices & tabs: SSE + frequent poll fallback
   useEffect(() => {
     fetchGames();
-    const interval = setInterval(fetchGames, 2000);
+    const interval = setInterval(fetchGames, 1500);
 
     let es: EventSource | null = null;
-    try {
-      es = new EventSource('/api/chat/stream');
-      
-      es.addEventListener('init', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.games && Array.isArray(data.games)) {
-            setGames(data.games);
+    let reconnectTimeout: any = null;
+
+    const setupSSE = () => {
+      try {
+        if (es) es.close();
+        es = new EventSource('/api/chat/stream');
+
+        es.addEventListener('init', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.games && Array.isArray(data.games)) {
+              setGames(data.games);
+            }
+          } catch {}
+        });
+
+        es.addEventListener('games_sync', (e: MessageEvent) => {
+          try {
+            const list = JSON.parse(e.data);
+            if (Array.isArray(list)) {
+              setGames(list);
+            }
+          } catch {
+            fetchGames();
           }
-        } catch {}
-      });
+        });
 
-      es.addEventListener('games_sync', (e: MessageEvent) => {
-        try {
-          const list = JSON.parse(e.data);
-          if (Array.isArray(list)) {
-            setGames(list);
+        es.addEventListener('game_added', (e: MessageEvent) => {
+          try {
+            const game: Game = JSON.parse(e.data);
+            setGames(prev => [game, ...prev.filter(g => g.filename !== game.filename)]);
+            setLiveToast(`🎮 New Game Added: "${game.title}"! Live for everyone.`);
+            setTimeout(() => setLiveToast(null), 5000);
+          } catch {
+            fetchGames();
           }
-        } catch {
-          fetchGames();
-        }
-      });
+        });
 
-      es.addEventListener('game_added', (e: MessageEvent) => {
-        try {
-          const game: Game = JSON.parse(e.data);
-          setGames(prev => [game, ...prev.filter(g => g.filename !== game.filename)]);
-          setLiveToast(`🎮 New Game Added: "${game.title}"! Live for everyone.`);
-          setTimeout(() => setLiveToast(null), 5000);
-        } catch {
-          fetchGames();
-        }
-      });
+        es.addEventListener('game_updated', (e: MessageEvent) => {
+          try {
+            const updated: Game = JSON.parse(e.data);
+            setGames(prev => prev.map(g => g.filename === updated.filename ? { ...g, ...updated } : g));
+          } catch {
+            fetchGames();
+          }
+        });
 
-      es.addEventListener('game_updated', (e: MessageEvent) => {
-        try {
-          const updated: Game = JSON.parse(e.data);
-          setGames(prev => prev.map(g => g.filename === updated.filename ? { ...g, ...updated } : g));
-        } catch {
-          fetchGames();
-        }
-      });
+        es.addEventListener('game_deleted', (e: MessageEvent) => {
+          try {
+            const { filename } = JSON.parse(e.data);
+            setGames(prev => prev.filter(g => g.filename !== filename));
+            setLiveToast(`🗑️ Game removed.`);
+            setTimeout(() => setLiveToast(null), 3000);
+          } catch {
+            fetchGames();
+          }
+        });
 
-      es.addEventListener('game_deleted', (e: MessageEvent) => {
-        try {
-          const { filename } = JSON.parse(e.data);
-          setGames(prev => prev.filter(g => g.filename !== filename));
-        } catch {
+        es.onerror = () => {
+          es?.close();
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = setTimeout(setupSSE, 2000);
+        };
+      } catch {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(setupSSE, 3000);
+      }
+    };
+
+    setupSSE();
+
+    // Cross-tab broadcast channel for instant multi-tab sync
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel('wtg_games_channel');
+      channel.onmessage = (e) => {
+        if (e.data?.type === 'game_added' && e.data?.game) {
+          setGames(prev => [e.data.game, ...prev.filter(g => g.filename !== e.data.game.filename)]);
+        } else if (e.data?.type === 'game_deleted' && e.data?.filename) {
+          setGames(prev => prev.filter(g => g.filename !== e.data.filename));
+        } else {
           fetchGames();
         }
-      });
-    } catch {}
+      };
+    }
 
     return () => {
       clearInterval(interval);
+      clearTimeout(reconnectTimeout);
       if (es) es.close();
+      if (channel) channel.close();
     };
   }, [fetchGames]);
 
@@ -213,7 +248,16 @@ export default function App() {
     // 1. Instant optimistic UI deletion
     setGames(prev => prev.filter(g => g.filename !== filename));
 
-    // 2. Persist deletion in localStorage (for GitHub Pages and reloads)
+    // 2. Broadcast across tabs immediately
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const channel = new BroadcastChannel('wtg_games_channel');
+        channel.postMessage({ type: 'game_deleted', filename });
+        channel.close();
+      } catch {}
+    }
+
+    // 3. Persist deletion in localStorage (for GitHub Pages and reloads)
     try {
       const customRaw = localStorage.getItem('wtg_custom_games');
       if (customRaw) {

@@ -131,6 +131,13 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
       } catch {}
 
       if (res && res.ok && data?.success && data?.game) {
+        if (typeof BroadcastChannel !== 'undefined') {
+          try {
+            const channel = new BroadcastChannel('wtg_games_channel');
+            channel.postMessage({ type: 'game_added', game: data.game });
+            channel.close();
+          } catch {}
+        }
         onGameAdded(data.game);
         onClose();
         return;
@@ -155,6 +162,14 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
         const filtered = custom.filter((g: any) => g.filename !== finalFilename);
         localStorage.setItem('wtg_custom_games', JSON.stringify([newGame, ...filtered]));
       } catch {}
+
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const channel = new BroadcastChannel('wtg_games_channel');
+          channel.postMessage({ type: 'game_added', game: newGame });
+          channel.close();
+        } catch {}
+      }
 
       onGameAdded(newGame);
       onClose();
