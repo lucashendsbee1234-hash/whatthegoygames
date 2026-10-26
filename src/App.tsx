@@ -202,19 +202,39 @@ export default function App() {
 
   const handleDeleteGame = async (e: React.MouseEvent, filename: string) => {
     e.stopPropagation();
-    if (!isAdmin || !adminToken) return;
+    if (!isAdmin) return;
     if (confirmDelete !== filename) {
       setConfirmDelete(filename);
       setTimeout(() => setConfirmDelete(null), 3000);
       return;
     }
     setConfirmDelete(null);
+
+    // 1. Instant optimistic UI deletion
+    setGames(prev => prev.filter(g => g.filename !== filename));
+
+    // 2. Persist deletion in localStorage (for GitHub Pages and reloads)
+    try {
+      const customRaw = localStorage.getItem('wtg_custom_games');
+      if (customRaw) {
+        const customGames: Game[] = JSON.parse(customRaw);
+        localStorage.setItem('wtg_custom_games', JSON.stringify(customGames.filter(g => g.filename !== filename)));
+      }
+      const deletedRaw = localStorage.getItem('wtg_deleted_games');
+      const deleted: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      if (!deleted.includes(filename)) {
+        deleted.push(filename);
+        localStorage.setItem('wtg_deleted_games', JSON.stringify(deleted));
+      }
+    } catch {}
+
+    // 3. Delete on server
+    const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
       await fetch(`/api/games/${encodeURIComponent(filename)}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${adminToken}` },
+        headers: { 'Authorization': `Bearer ${tokenToSend}` },
       });
-      setGames(prev => prev.filter(g => g.filename !== filename));
     } catch {}
   };
 

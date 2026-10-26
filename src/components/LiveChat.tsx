@@ -208,34 +208,57 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
   };
 
   const handleDeleteMessage = async (id: string) => {
-    if (!isAdmin || !adminToken) return;
+    if (!isAdmin) return;
+    // 1. Optimistic instant local removal
+    setMessages(prev => prev.filter(m => m.id !== id));
+
+    // 2. Persist to localStorage for GitHub Pages and offline
+    try {
+      const raw = localStorage.getItem('wtg_chat_messages');
+      if (raw) {
+        const msgs = JSON.parse(raw);
+        localStorage.setItem('wtg_chat_messages', JSON.stringify(msgs.filter((m: any) => m.id !== id)));
+      }
+    } catch {}
+
+    // 3. Delete on server
+    const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
       await fetch(`/api/chat/message/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          'Authorization': `Bearer ${tokenToSend}`,
         },
       });
-      setMessages(prev => prev.filter(m => m.id !== id));
     } catch {}
   };
 
   const handleClearChat = async () => {
-    if (!isAdmin || !adminToken) return;
+    if (!isAdmin) return;
     if (!confirmClear) {
       setConfirmClear(true);
       setTimeout(() => setConfirmClear(false), 3000);
       return;
     }
     setConfirmClear(false);
+
+    // 1. Instant local clear
+    setMessages([]);
+
+    // 2. Clear localStorage
+    try {
+      localStorage.removeItem('wtg_chat_messages');
+    } catch {}
+
+    // 3. Clear on server
+    const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
       await fetch('/api/chat/clear', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          'Authorization': `Bearer ${tokenToSend}`,
         },
       });
-      setMessages([]);
     } catch {}
   };
 

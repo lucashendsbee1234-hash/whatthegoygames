@@ -17,11 +17,10 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState(false);
   const [showCookieNotice, setShowCookieNotice] = useState(true);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Match the exact tab title seen in the user's browser tab: "Skyward | A Better SI..."
+  // Match the exact tab title seen in the user's browser tab: "Skyward | A Better SIS & ERP for K-12 School Districts"
   useEffect(() => {
     const originalTitle = document.title;
     document.title = 'Skyward | A Better SIS & ERP for K-12 School Districts';
@@ -49,7 +48,6 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
   useEffect(() => {
     let keyBuffer = '';
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if typing in a normal form input (they can submit or press enter)
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
@@ -72,7 +70,6 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
       onUnlock();
       return;
     }
-    // Fake realistic search
     setSearchQuery('');
     setShowSearch(false);
   };
@@ -122,20 +119,18 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
     <div className="min-h-screen bg-white text-[#1f2937] font-sans flex flex-col select-none overflow-x-hidden">
       {/* 1. TOP NAV BAR: Exact Royal Blue (#00539f) with Skyward Logo, Log in, and Get started */}
       <header className="bg-[#00539f] text-white">
-        <div className="w-full px-4 sm:px-8 py-3 sm:py-3.5 flex items-center justify-between">
-          {/* Authentic Vector SVG Skyward Logo: 100% self-contained and crystal clear */}
-          <div className="flex items-center cursor-pointer">
-            <svg viewBox="0 0 160 48" className="h-10 sm:h-12 w-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Flight swooshes */}
-              <path d="M12 28 C28 14 56 12 86 16 C60 19 36 24 16 34 Z" fill="white" />
-              <path d="M24 24 C40 12 66 10 96 14 C72 17 50 21 30 30 Z" fill="white" opacity="0.85" />
-              <path d="M38 20 C54 11 78 9 106 13 C84 15 64 19 46 26 Z" fill="white" opacity="0.7" />
-              <path d="M52 16 C68 9 90 8 116 12 C96 14 78 17 60 22 Z" fill="white" opacity="0.55" />
-              {/* SKYWARD® Text */}
-              <text x="12" y="44" fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" fontSize="19" fontWeight="900" fill="white" letterSpacing="1.5">SKYWARD</text>
-              <circle cx="118" cy="32" r="3.5" stroke="white" strokeWidth="0.8" fill="none" />
-              <text x="116.5" y="34.5" fontFamily="sans-serif" fontSize="4.5" fill="white" fontWeight="bold">R</text>
-            </svg>
+        <div className="w-full px-4 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between">
+          {/* Exact Skyward Logo from screenshot */}
+          <div className="flex items-center cursor-pointer" onClick={() => {}}>
+            <img 
+              src="/assets/skyward_logo.png" 
+              alt="Skyward" 
+              className="h-9 sm:h-11 w-auto object-contain"
+              onError={(e) => {
+                // Fallback vector in case image file is moving
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
           </div>
 
           {/* Right Action Items */}
@@ -145,7 +140,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
               onClick={() => setShowLoginModal(true)}
               className="flex items-center gap-1.5 text-white hover:text-sky-200 font-semibold text-sm sm:text-base px-3 sm:px-4 py-2 transition-colors cursor-pointer mr-2 sm:mr-3"
             >
-              <LogIn className="w-4 h-4 sm:w-5 sm:h-5 rotate-180" />
+              <LogIn className="w-4 h-4 sm:w-5 sm:h-5 rotate-180 stroke-[2.5]" />
               <span>Log in</span>
             </button>
 
@@ -155,54 +150,39 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
               className="bg-[#52b72a] hover:bg-[#48a524] text-white font-bold text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-2.5 flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
             >
               <span>Get started</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
         </div>
 
-        {/* 2. SUB-NAV BAR: Exact Slate-Blue (#5575b4) with Products, Resources, Events, Support, Blogs, About, Search */}
-        <div className="bg-[#5575b4] text-white border-t border-blue-400/20 px-4 sm:px-8 py-2.5 flex items-center justify-between text-xs sm:text-sm font-semibold tracking-wide">
+        {/* 2. SUB-NAV BAR: Exact Slate-Blue (#48679d) matching screenshot */}
+        <div className="bg-[#48679d] text-white border-t border-blue-400/20 px-4 sm:px-8 py-2 sm:py-2.5 flex items-center justify-between text-xs sm:text-sm font-semibold tracking-wide">
           <nav className="flex items-center gap-4 sm:gap-8 overflow-x-auto py-0.5">
-            <div 
-              className="flex items-center gap-1 cursor-pointer hover:text-sky-100"
-              onClick={() => setActiveDropdown(activeDropdown === 'products' ? null : 'products')}
-            >
+            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
               <span>Products</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
             </div>
 
-            <div 
-              className="flex items-center gap-1 cursor-pointer hover:text-sky-100"
-              onClick={() => setActiveDropdown(activeDropdown === 'resources' ? null : 'resources')}
-            >
+            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
               <span>Resources</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
             </div>
 
             <span className="cursor-pointer hover:text-sky-100">Events</span>
 
-            <div 
-              className="flex items-center gap-1 cursor-pointer hover:text-sky-100"
-              onClick={() => setActiveDropdown(activeDropdown === 'support' ? null : 'support')}
-            >
+            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
               <span>Support</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
             </div>
 
-            <div 
-              className="flex items-center gap-1 cursor-pointer hover:text-sky-100"
-              onClick={() => setActiveDropdown(activeDropdown === 'blogs' ? null : 'blogs')}
-            >
+            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
               <span>Blogs</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
             </div>
 
-            <div 
-              className="flex items-center gap-1 cursor-pointer hover:text-sky-100"
-              onClick={() => setActiveDropdown(activeDropdown === 'about' ? null : 'about')}
-            >
+            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
               <span>About</span>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
             </div>
           </nav>
 
@@ -215,7 +195,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
               }}
               className="flex items-center gap-1.5 cursor-pointer hover:text-sky-100 py-0.5 px-1.5 rounded transition-colors"
             >
-              <Search className="w-4 h-4" />
+              <Search className="w-4 h-4 stroke-[2.5]" />
               <span>Search</span>
             </button>
           </div>
@@ -223,7 +203,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
 
         {/* Dropdown Search Bar (Stealth Password Entry Method #1) */}
         {showSearch && (
-          <div className="bg-[#4665a3] px-4 sm:px-8 py-3 border-t border-blue-300/30 shadow-inner flex items-center justify-between gap-3 animate-in fade-in duration-150">
+          <div className="bg-[#3e5a8c] px-4 sm:px-8 py-3 border-t border-blue-300/30 shadow-inner flex items-center justify-between gap-3 animate-in fade-in duration-150">
             <form onSubmit={handleSearchSubmit} className="flex-1 max-w-2xl flex items-center gap-2">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -245,7 +225,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
             </form>
             <button 
               onClick={() => setShowSearch(false)}
-              className="text-white/80 hover:text-white p-1"
+              className="text-white/80 hover:text-white p-1 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -253,52 +233,28 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
         )}
       </header>
 
-      {/* 3. HERO SECTION: Authentic Skyward Classroom & Headline */}
-      <section className="relative w-full bg-gradient-to-r from-[#0d233e] via-[#16365c] to-[#122b49] overflow-hidden flex-1 min-h-[520px] sm:min-h-[580px] lg:min-h-[640px] flex items-center">
-        {/* Crisp Classroom imagery */}
+      {/* 3. HERO SECTION: 100% IDENTICAL TO SCREENSHOT IMG_5626.png */}
+      <section className="relative w-full overflow-hidden flex-1 flex items-center bg-[#1b263b]">
+        {/* Exact cropped hero image of teacher, student, classroom & books */}
         <div 
-          className="absolute inset-0 bg-cover bg-center sm:bg-right-top opacity-60 mix-blend-luminosity"
-          style={{ backgroundImage: `url('https://images.unsplash.com/photo-1577896851231-70ef18881754?w=1600&q=85')` }}
-        />
-
-        {/* Gradient overlay for perfect readability matching the screenshot */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0d233e]/95 via-[#0d233e]/75 to-transparent sm:from-[#0d233e]/90 sm:via-[#0d233e]/40 sm:to-transparent" />
-
-        {/* Hero Content */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-12 py-12 lg:py-20 w-full">
-          <div className="max-w-xl sm:max-w-2xl text-white space-y-4 sm:space-y-6">
-            {/* Exact Headline from Skyward screenshot */}
-            <h1 className="text-3xl sm:text-5xl lg:text-[56px] font-black tracking-tight leading-[1.08] drop-shadow-sm font-sans">
-              Less time on tasks.<br />
-              More time for students.
-            </h1>
-
-            {/* Exact Subtitle from Skyward screenshot */}
-            <p className="text-base sm:text-lg lg:text-xl font-medium text-slate-100 leading-snug sm:leading-relaxed max-w-xl drop-shadow-xs">
-              You can't squeeze any more hours into the school day, but you can find ways to complete essential administrative tasks with super speed.
-            </p>
-
-            {/* Exact "Watch the story" button with play icon */}
-            <div className="pt-2 sm:pt-4">
-              <button
-                onClick={() => setShowStoryModal(true)}
-                className="inline-flex items-center gap-2.5 border-2 border-white bg-black/30 hover:bg-white hover:text-[#00539f] text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-full font-bold text-sm sm:text-base transition-all shadow-md group cursor-pointer backdrop-blur-2xs"
-              >
-                <div className="w-5 h-5 rounded-full bg-white text-black flex items-center justify-center group-hover:bg-[#00539f] group-hover:text-white transition-colors">
-                  <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
-                </div>
-                <span>Watch the story</span>
-              </button>
-            </div>
-          </div>
+          className="w-full relative aspect-[2360/876] min-h-[460px] sm:min-h-[540px] lg:min-h-[600px] bg-cover bg-left sm:bg-center"
+          style={{ backgroundImage: `url('/assets/skyward_hero_opt.jpg')` }}
+        >
+          {/* Clickable overlay for "Watch the story" button */}
+          <div 
+            onClick={() => setShowStoryModal(true)}
+            className="absolute left-[3%] sm:left-[4%] bottom-[12%] sm:bottom-[15%] w-48 sm:w-60 h-10 sm:h-12 rounded-full cursor-pointer hover:opacity-90"
+            title="Watch the story"
+          />
         </div>
       </section>
 
-      {/* 4. COOKIE CONSENT BANNER: Exact gray bottom bar matching screenshot */}
+      {/* 4. COOKIE CONSENT BANNER: Exact copy and styling matching IMG_5626.png */}
       {showCookieNotice && (
-        <div className="bg-[#f2f2f2] text-[#4b5563] text-xs sm:text-sm py-4 px-6 border-t border-slate-300 flex flex-col sm:flex-row items-center justify-between gap-4 z-20 shadow-lg">
-          <p className="text-center sm:text-left leading-relaxed max-w-4xl">
-            This site uses cookies to improve your browsing experience and to help us understand how you use our site. To learn more about how we use this data, click to{' '}
+        <div className="bg-[#f2f2f2] text-[#555] text-xs sm:text-[13px] py-4 px-6 border-t border-slate-300 flex flex-col items-center justify-center gap-3 z-20 shadow-md">
+          <p className="text-center leading-relaxed max-w-4xl">
+            This site uses cookies to improve your browsing experience and to help us understand how you use our site.<br className="hidden sm:inline" />
+            To learn more about how we use this data, click to{' '}
             <span className="text-[#00539f] underline cursor-pointer font-medium hover:text-[#003d75]">
               view our Privacy Policy
             </span>
@@ -307,7 +263,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
 
           <button
             onClick={() => setShowCookieNotice(false)}
-            className="bg-[#2d3748] hover:bg-[#1a202c] text-white font-bold text-xs uppercase tracking-wider px-6 py-2 rounded transition-colors shrink-0 shadow-xs cursor-pointer"
+            className="bg-[#313131] hover:bg-[#1a1a1a] text-white font-bold text-xs uppercase tracking-wider px-7 py-2 rounded transition-colors shadow-xs cursor-pointer"
           >
             OK
           </button>
@@ -373,7 +329,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
                 <button
                   type="button"
                   onClick={() => setShowLoginModal(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800"
+                  className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -397,7 +353,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
               <span className="font-bold text-sm">Skyward Stories: Empowering K-12 Classrooms</span>
               <button 
                 onClick={() => setShowStoryModal(false)}
-                className="text-white hover:text-sky-200"
+                className="text-white hover:text-sky-200 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
