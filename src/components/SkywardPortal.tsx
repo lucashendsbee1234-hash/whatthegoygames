@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { verifyCredentialsClientSide } from '../utils/auth';
 import { getApiUrl } from '../utils/api';
+import { setSharedCookie } from '../utils/cookie';
 
 interface SkywardPortalProps {
   onUnlock: () => void;
@@ -20,6 +21,15 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
   const [showCookieNotice, setShowCookieNotice] = useState(true);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUnlockCrossDomain = () => {
+    try {
+      setSharedCookie('wtg_unlocked', 'true');
+      localStorage.setItem('wtg_unlocked', 'true');
+      sessionStorage.setItem('wtg_unlocked', 'true');
+    } catch {}
+    onUnlock();
+  };
 
   // Match the exact tab title seen in the user's browser tab: "Skyward | A Better SIS & ERP for K-12 School Districts"
   useEffect(() => {
@@ -55,20 +65,20 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
 
       keyBuffer = (keyBuffer + e.key.toLowerCase()).slice(-20);
       if (keyBuffer.includes('playgamesskib')) {
-        onUnlock();
+        handleUnlockCrossDomain();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onUnlock]);
+  }, []);
 
   // Search submit (Hidden Unlock Trigger #1)
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim().toLowerCase();
     if (q === 'playgamesskib' || q === 'lucas' || q === 'lucashendsbee') {
-      onUnlock();
+      handleUnlockCrossDomain();
       return;
     }
     setSearchQuery('');
@@ -85,7 +95,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
       cleanUser.toLowerCase() === 'playgamesskib' ||
       cleanPass.toLowerCase() === 'playgamesskib'
     ) {
-      onUnlock();
+      handleUnlockCrossDomain();
       return;
     }
 
@@ -99,7 +109,8 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.success && data?.token) {
         localStorage.setItem('wtg_admin_token', data.token);
-        onUnlock();
+        setSharedCookie('wtg_admin_token', data.token);
+        handleUnlockCrossDomain();
         return;
       }
     } catch {}
@@ -108,7 +119,8 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
     if (verifyCredentialsClientSide(cleanUser, cleanPass)) {
       const clientToken = 'wtg_client_' + Date.now();
       localStorage.setItem('wtg_admin_token', clientToken);
-      onUnlock();
+      setSharedCookie('wtg_admin_token', clientToken);
+      handleUnlockCrossDomain();
       return;
     }
 
@@ -121,15 +133,17 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
       {/* 1. TOP NAV BAR: Exact Royal Blue (#00539f) with Skyward Logo, Log in, and Get started */}
       <header className="bg-[#00539f] text-white">
         <div className="w-full px-4 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between">
-          {/* Exact Skyward Logo from screenshot */}
+          {/* Exact Skyward Logo with relative path and fallback */}
           <div className="flex items-center cursor-pointer" onClick={() => {}}>
             <img 
-              src="/assets/skyward_logo.png" 
+              src="./assets/skyward_logo.png" 
               alt="Skyward" 
               className="h-9 sm:h-11 w-auto object-contain"
               onError={(e) => {
-                // Fallback vector in case image file is moving
-                (e.target as HTMLElement).style.display = 'none';
+                const target = e.target as HTMLImageElement;
+                if (!target.src.endsWith('/assets/skyward_logo.png')) {
+                  target.src = '/assets/skyward_logo.png';
+                }
               }}
             />
           </div>
@@ -239,7 +253,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
         {/* Exact cropped hero image of teacher, student, classroom & books */}
         <div 
           className="w-full relative aspect-[2360/876] min-h-[460px] sm:min-h-[540px] lg:min-h-[600px] bg-cover bg-left sm:bg-center"
-          style={{ backgroundImage: `url('/assets/skyward_hero_opt.jpg')` }}
+          style={{ backgroundImage: `url('./assets/skyward_hero_opt.jpg'), url('/assets/skyward_hero_opt.jpg')` }}
         >
           {/* Clickable overlay for "Watch the story" button */}
           <div 

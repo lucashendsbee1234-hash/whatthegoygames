@@ -9,13 +9,20 @@ import { EditPhotoModal } from './components/EditPhotoModal';
 import { SkywardPortal } from './components/SkywardPortal';
 import { DEFAULT_GAMES, Game } from './utils/defaultGames';
 import { getApiUrl } from './utils/api';
+import { getSharedCookie, setSharedCookie, removeSharedCookie } from './utils/cookie';
 
 export default function App() {
   const [games, setGames] = useState<Game[]>(() => DEFAULT_GAMES);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeGame, setActiveGame] = useState<Game | null>(null);
   const [isPanic, setIsPanic] = useState(false);
-  const [isUnlocked, setIsUnlocked] = useState(() => sessionStorage.getItem('wtg_unlocked') === 'true');
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    return (
+      sessionStorage.getItem('wtg_unlocked') === 'true' ||
+      localStorage.getItem('wtg_unlocked') === 'true' ||
+      getSharedCookie('wtg_unlocked') === 'true'
+    );
+  });
   const [liveToast, setLiveToast] = useState<string | null>(null);
   
   // Admin auth
@@ -26,9 +33,9 @@ export default function App() {
   const [editingPhotoGame, setEditingPhotoGame] = useState<Game | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  // Verify stored admin token on start (Works seamlessly on GitHub Pages and AI Studio)
+  // Verify stored admin token on start (Works seamlessly across subdomains, GitHub Pages, and AI Studio)
   useEffect(() => {
-    const savedToken = localStorage.getItem('wtg_admin_token');
+    const savedToken = localStorage.getItem('wtg_admin_token') || getSharedCookie('wtg_admin_token');
     if (savedToken) {
       if (
         savedToken.startsWith('wtg_client_') || 
@@ -201,6 +208,8 @@ export default function App() {
       if (e.key === 'F2') {
         setIsUnlocked(false);
         sessionStorage.removeItem('wtg_unlocked');
+        localStorage.removeItem('wtg_unlocked');
+        removeSharedCookie('wtg_unlocked');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -213,7 +222,7 @@ export default function App() {
       document.title = 'whatthegoy';
       let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
       if (link) {
-        link.href = '/favicon.ico';
+        link.href = './favicon.ico';
       }
     }
   }, [isUnlocked, isPanic]);
@@ -222,6 +231,7 @@ export default function App() {
     setIsAdmin(true);
     setAdminToken(token);
     localStorage.setItem('wtg_admin_token', token);
+    setSharedCookie('wtg_admin_token', token);
   };
 
   const handleLogout = () => {
@@ -234,6 +244,7 @@ export default function App() {
     setIsAdmin(false);
     setAdminToken(null);
     localStorage.removeItem('wtg_admin_token');
+    removeSharedCookie('wtg_admin_token');
   };
 
   const handleDeleteGame = async (e: React.MouseEvent, filename: string) => {
@@ -294,6 +305,8 @@ export default function App() {
         onUnlock={() => {
           setIsUnlocked(true);
           sessionStorage.setItem('wtg_unlocked', 'true');
+          localStorage.setItem('wtg_unlocked', 'true');
+          setSharedCookie('wtg_unlocked', 'true');
           fetchGames();
         }}
       />

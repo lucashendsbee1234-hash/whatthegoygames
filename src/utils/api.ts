@@ -1,7 +1,7 @@
 // Universal API router ensuring GitHub Pages, custom domains, and AI Studio
 // all communicate with the EXACT same live shared backend.
 
-export const SHARED_BACKEND_URL = 'https://ais-dev-yx3oibt644mxf2xqith77p-114522950003.us-east1.run.app';
+export const SHARED_BACKEND_URL = '';
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
@@ -11,14 +11,10 @@ export function getApiBaseUrl(): string {
     return customBackend.trim().replace(/\/+$/, '');
   }
 
-  // If already on the Cloud Run server, use relative path
-  if (window.location.hostname.includes('run.app')) {
-    return '';
-  }
-
-  // When deployed to GitHub Pages (e.g. github.io), Vercel, or custom domain,
-  // route directly to the shared AI Studio backend so all devices sync together!
-  return SHARED_BACKEND_URL;
+  // Always use same-origin relative paths by default.
+  // This ensures domains, subdomains (e.g. play.domain.com), localhost,
+  // and cloud containers all talk to their own origin without CORS preflight blocks.
+  return '';
 }
 
 export function getApiUrl(endpoint: string): string {
