@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, FileCode, Globe, Code } from 'lucide-react';
+import { getApiUrl } from '../utils/api';
 
 interface AddGameModalProps {
   adminToken: string;
@@ -112,7 +113,7 @@ export const AddGameModal: React.FC<AddGameModalProps> = ({ adminToken, onClose,
       let data: any = null;
 
       try {
-        res = await fetch('/api/games/upload', {
+        res = await fetch(getApiUrl('/api/games/upload'), {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',

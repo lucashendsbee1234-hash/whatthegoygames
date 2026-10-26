@@ -8,6 +8,7 @@ import { AdminLoginModal } from './components/AdminLoginModal';
 import { EditPhotoModal } from './components/EditPhotoModal';
 import { SkywardPortal } from './components/SkywardPortal';
 import { DEFAULT_GAMES, Game } from './utils/defaultGames';
+import { getApiUrl } from './utils/api';
 
 export default function App() {
   const [games, setGames] = useState<Game[]>(() => DEFAULT_GAMES);
@@ -39,7 +40,7 @@ export default function App() {
         return;
       }
 
-      fetch('/api/admin/verify', {
+      fetch(getApiUrl('/api/admin/verify'), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${savedToken}` },
       })
@@ -53,7 +54,7 @@ export default function App() {
           }
         })
         .catch(() => {
-          // Fallback for GitHub Pages where /api/ doesn't exist
+          // Fallback for offline / static
           setIsAdmin(true);
           setAdminToken(savedToken);
         });
@@ -63,7 +64,7 @@ export default function App() {
   // Fetch games with cache-busting and live server sync
   const fetchGames = useCallback(async () => {
     try {
-      const res = await fetch(`/api/games?_t=${Date.now()}`, {
+      const res = await fetch(getApiUrl(`/api/games?_t=${Date.now()}`), {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache, no-store' },
       });
@@ -102,7 +103,7 @@ export default function App() {
     const setupSSE = () => {
       try {
         if (es) es.close();
-        es = new EventSource('/api/chat/stream');
+        es = new EventSource(getApiUrl('/api/chat/stream'));
 
         es.addEventListener('init', (e: MessageEvent) => {
           try {
@@ -225,7 +226,7 @@ export default function App() {
 
   const handleLogout = () => {
     if (adminToken) {
-      fetch('/api/admin/logout', {
+      fetch(getApiUrl('/api/admin/logout'), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${adminToken}` },
       }).catch(() => {});
@@ -275,7 +276,7 @@ export default function App() {
     // 3. Delete on server
     const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
-      await fetch(`/api/games/${encodeURIComponent(filename)}`, {
+      await fetch(getApiUrl(`/api/games/${encodeURIComponent(filename)}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${tokenToSend}` },
       });

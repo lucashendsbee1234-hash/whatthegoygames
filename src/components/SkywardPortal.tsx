@@ -3,6 +3,7 @@ import {
   Search, Play, ArrowRight, LogIn, ChevronDown, X, Lock
 } from 'lucide-react';
 import { verifyCredentialsClientSide } from '../utils/auth';
+import { getApiUrl } from '../utils/api';
 
 interface SkywardPortalProps {
   onUnlock: () => void;
@@ -90,7 +91,7 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
 
     // Direct Admin Sign In from Skyward Login modal
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await fetch(getApiUrl('/api/admin/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: cleanUser, password: cleanPass }),

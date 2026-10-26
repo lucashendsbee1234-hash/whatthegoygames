@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageSquare, Send, ChevronDown, ChevronUp, Trash2, Shield, Circle } from 'lucide-react';
+import { getApiUrl } from '../utils/api';
 
 interface ChatMessage {
   id: string;
@@ -27,10 +28,10 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch messages from server with cache-busting and GitHub Pages fallback
+  // Fetch messages from server with cache-busting and live sync
   const fetchMessages = useCallback(async () => {
     try {
-      const res = await fetch(`/api/chat/messages?_t=${Date.now()}`, {
+      const res = await fetch(getApiUrl(`/api/chat/messages?_t=${Date.now()}`), {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache, no-store' },
       });
@@ -71,7 +72,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
           eventSource.close();
         }
 
-        eventSource = new EventSource('/api/chat/stream');
+        eventSource = new EventSource(getApiUrl('/api/chat/stream'));
 
         eventSource.onopen = () => {
           setIsConnected(true);
@@ -181,7 +182,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     } catch {}
 
     try {
-      const res = await fetch('/api/chat/message', {
+      const res = await fetch(getApiUrl('/api/chat/message'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -224,7 +225,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     // 3. Delete on server
     const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
-      await fetch(`/api/chat/message/${id}`, {
+      await fetch(getApiUrl(`/api/chat/message/${id}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${tokenToSend}`,
@@ -253,7 +254,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     // 3. Clear on server
     const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
-      await fetch('/api/chat/clear', {
+      await fetch(getApiUrl('/api/chat/clear'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${tokenToSend}`,

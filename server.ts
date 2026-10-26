@@ -13,6 +13,7 @@ process.env.DISABLE_HMR = 'true';
 const PORT = 3000;
 const isProd = process.env.NODE_ENV === 'production';
 const gamesDir = path.resolve(__dirname, 'games');
+const publicGamesDir = path.resolve(__dirname, 'public/games');
 const dataDir = path.resolve(__dirname, 'data');
 const chatFile = path.resolve(dataDir, 'chat_messages.json');
 const gamesMetaFile = path.resolve(dataDir, 'games_meta.json');
@@ -21,6 +22,9 @@ const gamesStoreFile = path.resolve(dataDir, 'games_store.json');
 // Ensure directories exist
 if (!fs.existsSync(gamesDir)) {
   fs.mkdirSync(gamesDir, { recursive: true });
+}
+if (!fs.existsSync(publicGamesDir)) {
+  fs.mkdirSync(publicGamesDir, { recursive: true });
 }
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -290,7 +294,7 @@ function getAllGamesList() {
     id: g.filename,
     filename: g.filename,
     title: g.title,
-    url: `/games/${encodeURIComponent(g.filename)}`,
+    url: `./games/${encodeURIComponent(g.filename)}`,
     imageUrl: g.imageUrl || gamesMeta[g.filename]?.imageUrl || '',
     size: g.size,
     updatedAt: g.updatedAt,
@@ -412,6 +416,11 @@ async function startServer() {
       const targetPath = path.join(gamesDir, safeName);
       fs.writeFileSync(targetPath, content, 'utf-8');
 
+      const publicTargetPath = path.join(publicGamesDir, safeName);
+      try {
+        fs.writeFileSync(publicTargetPath, content, 'utf-8');
+      } catch {}
+
       const cleanImageUrl = String(imageUrl || '').trim();
       const title = (typeof req.body.title === 'string' && req.body.title.trim())
         ? req.body.title.trim()
@@ -508,14 +517,17 @@ async function startServer() {
       const filenameParam = path.basename(req.params.filename);
       const reqLower = filenameParam.toLowerCase();
 
-      // 1. Delete file on disk (case-insensitively)
-      if (fs.existsSync(gamesDir)) {
-        const files = fs.readdirSync(gamesDir);
-        for (const f of files) {
-          if (f.toLowerCase() === reqLower || f === filenameParam) {
-            try {
-              fs.unlinkSync(path.join(gamesDir, f));
-            } catch {}
+      // 1. Delete file on disk (case-insensitively) from games and public/games
+      const dirsToClean = [gamesDir, publicGamesDir];
+      for (const d of dirsToClean) {
+        if (fs.existsSync(d)) {
+          const files = fs.readdirSync(d);
+          for (const f of files) {
+            if (f.toLowerCase() === reqLower || f === filenameParam) {
+              try {
+                fs.unlinkSync(path.join(d, f));
+              } catch {}
+            }
           }
         }
       }

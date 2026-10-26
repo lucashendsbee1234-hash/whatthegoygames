@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Image as ImageIcon } from 'lucide-react';
+import { getApiUrl } from '../utils/api';
 
 interface EditPhotoModalProps {
   gameFilename: string;
@@ -28,12 +29,13 @@ export const EditPhotoModal: React.FC<EditPhotoModalProps> = ({
     setError(null);
 
     try {
-      const res = await fetch(`/api/games/${encodeURIComponent(gameFilename)}/photo`, {
+      const res = await fetch(getApiUrl(`/api/games/${encodeURIComponent(gameFilename)}/photo`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${adminToken}`,
         },
+
         body: JSON.stringify({
           imageUrl: imageUrl.trim(),
         }),

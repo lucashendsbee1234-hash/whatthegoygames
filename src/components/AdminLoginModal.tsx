@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Lock } from 'lucide-react';
 import { verifyCredentialsClientSide } from '../utils/auth';
+import { getApiUrl } from '../utils/api';
 
 interface AdminLoginModalProps {
   onClose: () => void;
@@ -25,7 +26,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onSuc
       let data: any = null;
 
       try {
-        res = await fetch('/api/admin/login', {
+        res = await fetch(getApiUrl('/api/admin/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 

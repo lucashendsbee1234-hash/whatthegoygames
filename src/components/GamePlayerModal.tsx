@@ -93,10 +93,11 @@ export const GamePlayerModal: React.FC<GamePlayerModalProps> = ({ game, onClose,
         <div className="flex-1 w-full bg-black relative flex items-center justify-center overflow-hidden">
           <iframe
             key={key}
-            src={game.url}
+            src={game.content ? undefined : game.url}
+            srcDoc={game.content || undefined}
             title={game.title}
             className="w-full h-full border-none bg-black"
-            allow="autoplay; fullscreen; clipboard-write"
+            allow="autoplay; fullscreen; clipboard-write; gamepad"
             sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms"
           />
         </div>
