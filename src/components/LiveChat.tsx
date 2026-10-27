@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageSquare, Send, ChevronDown, ChevronUp, Trash2, Shield, Circle } from 'lucide-react';
+import { MessageSquare, Send, ChevronDown, ChevronUp, Trash2, Shield } from 'lucide-react';
 import { getApiUrl } from '../utils/api';
 
 interface ChatMessage {
@@ -10,11 +10,10 @@ interface ChatMessage {
 }
 
 interface LiveChatProps {
-  isAdmin: boolean;
-  adminToken: string | null;
+  isAdmin?: boolean;
 }
 
-export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
+export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [customUsername, setCustomUsername] = useState(() => {
@@ -45,104 +44,113 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
       }
     } catch {}
 
-    // GitHub Pages / Static fallback
+    // Fallback: localStorage
     try {
       const raw = localStorage.getItem('wtg_chat_messages');
       if (raw) {
-        const localMsgs = JSON.parse(raw);
-        if (Array.isArray(localMsgs)) {
-          setMessages(localMsgs);
-          setIsConnected(true);
-          return;
-        }
+        setMessages(JSON.parse(raw));
       }
     } catch {}
-    setIsConnected(true);
   }, []);
 
-  // Live SSE connection with automatic reconnection
+  // Connect to SSE stream and periodic polling for fallback
   useEffect(() => {
-    let eventSource: EventSource | null = null;
+    fetchMessages();
+    const interval = setInterval(fetchMessages, 3000);
+
+    let es: EventSource | null = null;
     let reconnectTimeout: any = null;
-    let pollInterval: any = null;
 
-    const setupSSE = () => {
+    const setupChatSSE = () => {
       try {
-        if (eventSource) {
-          eventSource.close();
-        }
+        if (es) es.close();
+        es = new EventSource(getApiUrl('/api/chat/stream'));
 
-        eventSource = new EventSource(getApiUrl('/api/chat/stream'));
+        es.onopen = () => setIsConnected(true);
 
-        eventSource.onopen = () => {
-          setIsConnected(true);
-        };
-
-        eventSource.addEventListener('init', (e: MessageEvent) => {
+        es.addEventListener('chat_init', (e: MessageEvent) => {
           try {
-            const data = JSON.parse(e.data);
-            if (Array.isArray(data.messages)) {
-              setMessages(data.messages);
+            const list = JSON.parse(e.data);
+            if (Array.isArray(list)) {
+              setMessages(list);
+              setIsConnected(true);
             }
           } catch {}
         });
 
-        eventSource.addEventListener('chat_message', (e: MessageEvent) => {
+        es.addEventListener('chat_message', (e: MessageEvent) => {
           try {
-            const msg: ChatMessage = JSON.parse(e.data);
-            setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev;
-              return [...prev, msg].slice(-200);
+            const newMsg = JSON.parse(e.data);
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg].slice(-100);
             });
+            setIsConnected(true);
           } catch {}
         });
 
-        eventSource.addEventListener('chat_message_deleted', (e: MessageEvent) => {
+        es.addEventListener('chat_delete', (e: MessageEvent) => {
           try {
             const { id } = JSON.parse(e.data);
-            setMessages(prev => prev.filter(m => m.id !== id));
+            setMessages((prev) => prev.filter((m) => m.id !== id));
           } catch {}
         });
 
-        eventSource.addEventListener('chat_cleared', () => {
+        es.addEventListener('chat_cleared', () => {
           setMessages([]);
         });
 
-        eventSource.onerror = () => {
-          eventSource?.close();
+        es.onerror = () => {
           setIsConnected(false);
-          // Auto-reconnect after 2 seconds
+          es?.close();
           clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(setupSSE, 2500);
+          reconnectTimeout = setTimeout(setupChatSSE, 4000);
         };
       } catch {
         setIsConnected(false);
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(setupChatSSE, 5000);
       }
     };
 
-    fetchMessages();
-    setupSSE();
-    // Frequent poll fallback to ensure 100% reliability
-    pollInterval = setInterval(fetchMessages, 2000);
+    setupChatSSE();
+
+    // Cross-tab broadcast channel
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel('wtg_chat_channel');
+      channel.onmessage = (e) => {
+        if (e.data?.type === 'new_message' && e.data?.message) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === e.data.message.id)) return prev;
+            return [...prev, e.data.message].slice(-100);
+          });
+        } else if (e.data?.type === 'delete_message' && e.data?.id) {
+          setMessages((prev) => prev.filter((m) => m.id !== e.data.id));
+        } else if (e.data?.type === 'chat_cleared') {
+          setMessages([]);
+        }
+      };
+    }
 
     return () => {
-      if (eventSource) eventSource.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (pollInterval) clearInterval(pollInterval);
+      clearInterval(interval);
+      clearTimeout(reconnectTimeout);
+      if (es) es.close();
+      if (channel) channel.close();
     };
   }, [fetchMessages]);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
-    if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, isOpen]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   const handleUsernameChange = (val: string) => {
     const clean = val.slice(0, 20);
     setCustomUsername(clean);
-    localStorage.setItem('whatthegoy_nick', clean);
+    try {
+      localStorage.setItem('whatthegoy_nick', clean);
+    } catch {}
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -156,7 +164,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     const baseNick = customUsername.trim() || 'Player';
     const finalSender = isAdmin && showAdminTag ? `${baseNick} [Admin]` : baseNick;
 
-    // Temporary optimistic ID
     const tempId = `temp-${Date.now()}`;
     const optimisticMessage: ChatMessage = {
       id: tempId,
@@ -165,22 +172,26 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
       timestamp: Date.now(),
     };
 
-    // Instant local feedback
-    setMessages(prev => [...prev, optimisticMessage].slice(-200));
+    // 1. Optimistic local update
+    setMessages((prev) => [...prev, optimisticMessage].slice(-100));
 
-    // Save to localStorage for GitHub Pages / static hosting
+    // 2. Broadcast across tabs
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const channel = new BroadcastChannel('wtg_chat_channel');
+        channel.postMessage({ type: 'new_message', message: optimisticMessage });
+        channel.close();
+      } catch {}
+    }
+
+    // 3. Persist to localStorage
     try {
       const raw = localStorage.getItem('wtg_chat_messages');
-      const localMsgs = raw ? JSON.parse(raw) : [];
-      const updated = [...localMsgs, optimisticMessage].slice(-200);
-      localStorage.setItem('wtg_chat_messages', JSON.stringify(updated));
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('wtg_chat_channel');
-        bc.postMessage(optimisticMessage);
-        bc.close();
-      }
+      const cur = raw ? JSON.parse(raw) : [];
+      localStorage.setItem('wtg_chat_messages', JSON.stringify([...cur, optimisticMessage].slice(-100)));
     } catch {}
 
+    // 4. Send to live server
     try {
       const res = await fetch(getApiUrl('/api/chat/message'), {
         method: 'POST',
@@ -194,26 +205,22 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.message) {
-          // Replace optimistic message with confirmed server message
-          setMessages(prev => 
-            prev.map(m => m.id === tempId ? data.message : m)
+          setMessages((prev) =>
+            prev.map((m) => (m.id === tempId ? data.message : m))
           );
         }
       }
-    } catch {
-      // Keep optimistic message or retry on next poll
-      fetchMessages();
-    } finally {
+    } catch {} finally {
       setIsSending(false);
     }
   };
 
+  // Only allowed if isAdmin
   const handleDeleteMessage = async (id: string) => {
     if (!isAdmin) return;
-    // 1. Optimistic instant local removal
-    setMessages(prev => prev.filter(m => m.id !== id));
 
-    // 2. Persist to localStorage for GitHub Pages and offline
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+
     try {
       const raw = localStorage.getItem('wtg_chat_messages');
       if (raw) {
@@ -222,20 +229,18 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
       }
     } catch {}
 
-    // 3. Delete on server
-    const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
       await fetch(getApiUrl(`/api/chat/message/${id}`), {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${tokenToSend}`,
-        },
+        headers: { 'Authorization': 'Bearer drrtuiodrtduiivfgjxnflgk' },
       });
     } catch {}
   };
 
+  // Only allowed if isAdmin
   const handleClearChat = async () => {
     if (!isAdmin) return;
+
     if (!confirmClear) {
       setConfirmClear(true);
       setTimeout(() => setConfirmClear(false), 3000);
@@ -243,22 +248,16 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
     }
     setConfirmClear(false);
 
-    // 1. Instant local clear
     setMessages([]);
 
-    // 2. Clear localStorage
     try {
       localStorage.removeItem('wtg_chat_messages');
     } catch {}
 
-    // 3. Clear on server
-    const tokenToSend = adminToken || localStorage.getItem('wtg_admin_token') || 'drrtuiodrtduiivfgjxnflgk';
     try {
       await fetch(getApiUrl('/api/chat/clear'), {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${tokenToSend}`,
-        },
+        headers: { 'Authorization': 'Bearer drrtuiodrtduiivfgjxnflgk' },
       });
     } catch {}
   };
@@ -278,7 +277,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
             <span>{isConnected ? 'LIVE' : 'SYNC'}</span>
           </span>
           {isAdmin && (
-            <span className="text-[9px] bg-white text-black px-1 font-bold">ADMIN</span>
+            <span className="text-[9px] bg-emerald-400 text-black px-1 font-bold">ADMIN</span>
           )}
         </div>
 
@@ -289,7 +288,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
               className={`text-[9px] px-1 border transition-colors ${
                 confirmClear ? 'border-red-500 text-red-400 bg-red-950/40' : 'border-neutral-700 text-neutral-400 hover:text-red-400'
               }`}
-              title="Clear all chat messages"
+              title="Clear all chat messages (Admin Only)"
             >
               {confirmClear ? 'SURE?' : 'CLEAR'}
             </button>
@@ -317,12 +316,12 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
               <button
                 type="button"
                 onClick={() => setShowAdminTag(!showAdminTag)}
-                className={`text-[9px] px-1 py-0.5 border flex items-center gap-0.5 shrink-0 cursor-pointer ${
+                className={`text-[9px] px-1.5 py-0.5 border flex items-center gap-0.5 shrink-0 cursor-pointer ${
                   showAdminTag 
-                    ? 'border-white bg-white text-black font-bold' 
-                    : 'border-neutral-800 text-neutral-500 hover:text-white'
+                    ? 'border-emerald-400 bg-emerald-400 text-black font-bold' 
+                    : 'border-neutral-700 text-neutral-400 hover:text-white'
                 }`}
-                title="Toggle Admin badge on your chat messages"
+                title="Toggle [Admin] badge tag on your chat messages"
               >
                 <Shield className="w-2.5 h-2.5" />
                 <span>TAG</span>
@@ -342,18 +341,18 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin, adminToken }) => {
                 return (
                   <div key={msg.id} className="flex items-start justify-between group gap-1 text-[11px] leading-snug">
                     <div className="break-words flex-1">
-                      <span className={`font-bold mr-1 ${isMsgAdmin ? 'text-white underline font-mono' : 'text-neutral-300 font-mono'}`}>
+                      <span className={`font-bold mr-1 ${isMsgAdmin ? 'text-emerald-400 font-mono font-bold' : 'text-neutral-300 font-mono'}`}>
                         {msg.sender}:
                       </span>
                       <span className="text-neutral-100">{msg.text}</span>
                     </div>
 
-                    {/* Admin Moderation Button */}
+                    {/* Admin Message Delete Button */}
                     {isAdmin && (
                       <button
                         onClick={() => handleDeleteMessage(msg.id)}
-                        className="opacity-40 group-hover:opacity-100 text-neutral-500 hover:text-red-400 shrink-0 p-0.5 cursor-pointer"
-                        title="Delete message"
+                        className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 shrink-0 p-0.5 cursor-pointer"
+                        title="Delete message (Admin Only)"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>

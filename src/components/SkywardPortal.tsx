@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Search, Play, ArrowRight, LogIn, ChevronDown, X, Lock
+  Search, Play, ArrowRight, ChevronDown, X, Lock, CheckCircle
 } from 'lucide-react';
-import { verifyCredentialsClientSide } from '../utils/auth';
-import { getApiUrl } from '../utils/api';
 import { setSharedCookie } from '../utils/cookie';
 
 interface SkywardPortalProps {
@@ -13,12 +11,11 @@ interface SkywardPortalProps {
 export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [showStoryModal, setShowStoryModal] = useState(false);
-  const [loginUsername, setLoginUsername] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginError, setLoginError] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginInput, setLoginInput] = useState('');
   const [showCookieNotice, setShowCookieNotice] = useState(true);
+  const [activeCardModal, setActiveCardModal] = useState<string | null>(null);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,11 +70,11 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Search submit (Hidden Unlock Trigger #1)
+  // Stealth search submit: typing 'playgamesskib', 'lucas', or 'games' unlocks
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchQuery.trim().toLowerCase();
-    if (q === 'playgamesskib' || q === 'lucas' || q === 'lucashendsbee') {
+    if (q === 'playgamesskib' || q === 'lucas' || q === 'lucashendsbee' || q === 'games' || q === 'play' || q === 'wtg') {
       handleUnlockCrossDomain();
       return;
     }
@@ -85,60 +82,32 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
     setShowSearch(false);
   };
 
-  // Login modal submit (Unlock + Admin Auth)
-  const handleLoginSubmit = async (e: React.FormEvent) => {
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanUser = loginUsername.trim();
-    const cleanPass = loginPassword.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
-
-    if (
-      cleanUser.toLowerCase() === 'playgamesskib' ||
-      cleanPass.toLowerCase() === 'playgamesskib'
-    ) {
+    const q = loginInput.trim().toLowerCase();
+    if (q.includes('playgamesskib') || q.includes('lucas') || q.includes('games')) {
       handleUnlockCrossDomain();
       return;
     }
-
-    // Direct Admin Sign In from Skyward Login modal
-    try {
-      const res = await fetch(getApiUrl('/api/admin/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUser, password: cleanPass }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.success && data?.token) {
-        localStorage.setItem('wtg_admin_token', data.token);
-        setSharedCookie('wtg_admin_token', data.token);
-        handleUnlockCrossDomain();
-        return;
-      }
-    } catch {}
-
-    // GitHub Pages / Static fallback:
-    if (verifyCredentialsClientSide(cleanUser, cleanPass)) {
-      const clientToken = 'wtg_client_' + Date.now();
-      localStorage.setItem('wtg_admin_token', clientToken);
-      setSharedCookie('wtg_admin_token', clientToken);
-      handleUnlockCrossDomain();
-      return;
-    }
-
-    setLoginError(true);
-    setTimeout(() => setLoginError(false), 3000);
+    setShowLoginModal(false);
+    setLoginInput('');
   };
 
   return (
-    <div className="min-h-screen bg-white text-[#1f2937] font-sans flex flex-col select-none overflow-x-hidden">
-      {/* 1. TOP NAV BAR: Exact Royal Blue (#00539f) with Skyward Logo, Log in, and Get started */}
-      <header className="bg-[#00539f] text-white">
-        <div className="w-full px-4 sm:px-8 py-2.5 sm:py-3.5 flex items-center justify-between">
-          {/* Exact Skyward Logo with relative path and fallback */}
-          <div className="flex items-center cursor-pointer" onClick={() => {}}>
+    <div className="min-h-screen bg-[#00549c] font-sans flex flex-col select-none overflow-x-hidden text-slate-800">
+      {/* 1. TOP NAV BAR: Exact Royal Blue (#00549c) */}
+      <header className="bg-[#00549c] text-white z-20 sticky top-0 shadow-sm">
+        <div className="w-full px-4 sm:px-8 py-2 sm:py-2.5 flex items-center justify-between max-w-7xl mx-auto">
+          {/* Exact Skyward Logo from screenshot */}
+          <div 
+            className="flex items-center cursor-pointer hover:opacity-95 transition-opacity" 
+            onClick={() => {}}
+            title="Skyward"
+          >
             <img 
               src="./assets/skyward_logo.png" 
               alt="Skyward" 
-              className="h-9 sm:h-11 w-auto object-contain"
+              className="h-8 sm:h-10 w-auto object-contain"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
                 if (!target.src.endsWith('/assets/skyward_logo.png')) {
@@ -148,21 +117,19 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
             />
           </div>
 
-          {/* Right Action Items */}
-          <div className="flex items-center">
-            {/* Log in button with arrow bracket icon */}
+          {/* Right Action Items: Log in & Get started */}
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setShowLoginModal(true)}
-              className="flex items-center gap-1.5 text-white hover:text-sky-200 font-semibold text-sm sm:text-base px-3 sm:px-4 py-2 transition-colors cursor-pointer mr-2 sm:mr-3"
+              className="flex items-center gap-1.5 text-white hover:text-sky-200 font-semibold text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 transition-colors cursor-pointer"
             >
-              <LogIn className="w-4 h-4 sm:w-5 sm:h-5 rotate-180 stroke-[2.5]" />
+              <span className="text-base font-mono">⎋</span>
               <span>Log in</span>
             </button>
 
-            {/* Get started button: Exact green #52b72a */}
             <button
-              onClick={() => setShowLoginModal(true)}
-              className="bg-[#52b72a] hover:bg-[#48a524] text-white font-bold text-sm sm:text-base px-4 sm:px-6 py-2 sm:py-2.5 flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
+              onClick={() => setShowStoryModal(true)}
+              className="bg-[#52b72a] hover:bg-[#469e24] text-white font-bold text-xs sm:text-sm px-4 sm:px-5 py-2 flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer rounded-xs"
             >
               <span>Get started</span>
               <ArrowRight className="w-4 h-4 stroke-[2.5]" />
@@ -170,202 +137,171 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
           </div>
         </div>
 
-        {/* 2. SUB-NAV BAR: Exact Slate-Blue (#48679d) matching screenshot */}
-        <div className="bg-[#48679d] text-white border-t border-blue-400/20 px-4 sm:px-8 py-2 sm:py-2.5 flex items-center justify-between text-xs sm:text-sm font-semibold tracking-wide">
-          <nav className="flex items-center gap-4 sm:gap-8 overflow-x-auto py-0.5">
-            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
-              <span>Products</span>
-              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+        {/* 2. SUB-NAV BAR: Exact Slate-Blue (#43669b) */}
+        <div className="bg-[#43669b] text-white border-t border-blue-400/20 px-4 sm:px-8 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold tracking-wide">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <nav className="flex items-center gap-3 sm:gap-6 overflow-x-auto py-0.5">
+              <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100 px-1.5 py-0.5">
+                <span>Products</span>
+                <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+
+              <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100 px-1.5 py-0.5">
+                <span>Resources</span>
+                <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+
+              <span className="cursor-pointer hover:text-sky-100 px-1.5 py-0.5">Events</span>
+
+              <div className="flex items-center gap-1 cursor-pointer bg-[#335384] px-2 py-0.5 rounded-xs text-white">
+                <span>Support</span>
+                <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+
+              <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100 px-1.5 py-0.5">
+                <span>Blogs</span>
+                <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+
+              <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100 px-1.5 py-0.5">
+                <span>About</span>
+                <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+            </nav>
+
+            {/* Search Trigger */}
+            <div className="flex items-center shrink-0 ml-3">
+              <button
+                onClick={() => {
+                  setShowSearch(!showSearch);
+                  setTimeout(() => searchInputRef.current?.focus(), 100);
+                }}
+                className="flex items-center gap-1.5 text-white/95 hover:text-white cursor-pointer px-2 py-0.5"
+                title="Search Skyward.com"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>Search</span>
+              </button>
             </div>
-
-            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
-              <span>Resources</span>
-              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-            </div>
-
-            <span className="cursor-pointer hover:text-sky-100">Events</span>
-
-            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
-              <span>Support</span>
-              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-            </div>
-
-            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
-              <span>Blogs</span>
-              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-            </div>
-
-            <div className="flex items-center gap-1 cursor-pointer hover:text-sky-100">
-              <span>About</span>
-              <ChevronDown className="w-3.5 h-3.5 stroke-[2.5]" />
-            </div>
-          </nav>
-
-          {/* Search Trigger */}
-          <div className="flex items-center shrink-0 ml-4">
-            <button
-              onClick={() => {
-                setShowSearch(!showSearch);
-                setTimeout(() => searchInputRef.current?.focus(), 100);
-              }}
-              className="flex items-center gap-1.5 cursor-pointer hover:text-sky-100 py-0.5 px-1.5 rounded transition-colors"
-            >
-              <Search className="w-4 h-4 stroke-[2.5]" />
-              <span>Search</span>
-            </button>
           </div>
         </div>
 
-        {/* Dropdown Search Bar (Stealth Password Entry Method #1) */}
+        {/* Dropdown Search Bar (Stealth Password Entry Method) */}
         {showSearch && (
-          <div className="bg-[#3e5a8c] px-4 sm:px-8 py-3 border-t border-blue-300/30 shadow-inner flex items-center justify-between gap-3 animate-in fade-in duration-150">
-            <form onSubmit={handleSearchSubmit} className="flex-1 max-w-2xl flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search Skyward.com resources or products..."
-                  className="w-full bg-white text-slate-900 placeholder-slate-400 pl-9 pr-3 py-1.5 text-xs sm:text-sm rounded outline-none shadow-xs"
-                />
-              </div>
-              <button
-                type="submit"
-                className="bg-[#00539f] hover:bg-[#004280] text-white font-bold text-xs sm:text-sm px-4 py-1.5 rounded shadow-xs transition-colors"
+          <div className="bg-[#335384] px-4 sm:px-8 py-3 border-t border-blue-300/30 shadow-inner animate-in fade-in duration-150">
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+              <form onSubmit={handleSearchSubmit} className="flex-1 max-w-2xl flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search Skyward.com resources or products..."
+                    className="w-full bg-white text-slate-900 placeholder-slate-400 pl-9 pr-3 py-1.5 text-xs sm:text-sm rounded outline-none shadow-xs"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="bg-[#00549c] hover:bg-[#004280] text-white font-bold text-xs sm:text-sm px-4 py-1.5 rounded shadow-xs transition-colors cursor-pointer"
+                >
+                  Go
+                </button>
+              </form>
+              <button 
+                onClick={() => setShowSearch(false)}
+                className="text-white/80 hover:text-white p-1 cursor-pointer"
               >
-                Go
+                <X className="w-4 h-4" />
               </button>
-            </form>
-            <button 
-              onClick={() => setShowSearch(false)}
-              className="text-white/80 hover:text-white p-1 cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            </div>
           </div>
         )}
       </header>
 
-      {/* 3. HERO SECTION: 100% IDENTICAL TO SCREENSHOT IMG_5626.png */}
-      <section className="relative w-full overflow-hidden flex-1 flex items-center bg-[#1b263b]">
-        {/* Exact cropped hero image of teacher, student, classroom & books */}
-        <div 
-          className="w-full relative aspect-[2360/876] min-h-[460px] sm:min-h-[540px] lg:min-h-[600px] bg-cover bg-left sm:bg-center"
-          style={{ backgroundImage: `url('./assets/skyward_hero_opt.jpg'), url('/assets/skyward_hero_opt.jpg')` }}
-        >
-          {/* Clickable overlay for "Watch the story" button */}
-          <div 
+      {/* 3. HERO & MAIN SHOWCASE: 100% IDENTICAL TO USER'S SCREENSHOT */}
+      <main className="flex-1 w-full bg-[#1b263b] relative overflow-hidden flex flex-col items-center">
+        <div className="w-full relative max-w-[1920px] aspect-[1898/946] min-h-[580px] sm:min-h-[700px] lg:min-h-[820px] flex flex-col justify-between">
+          {/* Exact Real Visual from User's Screenshot */}
+          <img 
+            src="./assets/skyward_screenshot.png"
+            alt="Skyward Education Portal"
+            className="w-full h-full object-cover object-top select-none pointer-events-none absolute inset-0"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (!target.src.includes('Screenshot_2026-10-27')) {
+                target.src = './assets/aistudio/Screenshot_2026-10-27_185600_142769a1.png';
+              }
+            }}
+          />
+
+          {/* Hot-Zone Overlay 1: "Watch the story" Button */}
+          <button
             onClick={() => setShowStoryModal(true)}
-            className="absolute left-[3%] sm:left-[4%] bottom-[12%] sm:bottom-[15%] w-48 sm:w-60 h-10 sm:h-12 rounded-full cursor-pointer hover:opacity-90"
+            className="absolute left-[8%] sm:left-[8.5%] top-[52%] sm:top-[53%] w-[130px] sm:w-[155px] h-[36px] sm:h-[44px] rounded-full cursor-pointer hover:bg-white/10 transition-colors z-10"
             title="Watch the story"
           />
+
+          {/* Hot-Zone Overlay 2: Bottom 3 Floating Cards */}
+          <div className="absolute left-[7%] right-[7%] bottom-[12%] sm:bottom-[13%] grid grid-cols-3 gap-2 sm:gap-4 h-[120px] sm:h-[145px] z-10">
+            {/* Card 1: Meet DistrictPulse */}
+            <div 
+              onClick={() => setActiveCardModal('DistrictPulse™ Analytics with Amazon Web Services')}
+              className="cursor-pointer hover:bg-black/5 rounded-xs transition-colors"
+              title="Learn more about DistrictPulse"
+            />
+            {/* Card 2: iCon 2027 Registration */}
+            <div 
+              onClick={() => setActiveCardModal('iCon 2027 Skyward User Conference')}
+              className="cursor-pointer hover:bg-black/5 rounded-xs transition-colors"
+              title="iCon 2027 Registration"
+            />
+            {/* Card 3: Thinking about Migrating to Qmlativ */}
+            <div 
+              onClick={() => setActiveCardModal('Migrating to Qmlativ: Case Studies')}
+              className="cursor-pointer hover:bg-black/5 rounded-xs transition-colors"
+              title="Migrating to Qmlativ"
+            />
+          </div>
+
+          {/* Hot-Zone Overlay 3: Cookie Banner "OK" Button */}
+          {showCookieNotice && (
+            <button
+              onClick={() => setShowCookieNotice(false)}
+              className="absolute left-[48%] -translate-x-1/2 bottom-[2%] sm:bottom-[2.5%] w-[48px] sm:w-[58px] h-[24px] sm:h-[30px] cursor-pointer z-10 hover:opacity-80"
+              title="Acknowledge cookie policy"
+            />
+          )}
         </div>
-      </section>
+      </main>
 
-      {/* 4. COOKIE CONSENT BANNER: Exact copy and styling matching IMG_5626.png */}
+      {/* 4. COOKIE NOTICE FALLBACK BANNER (if scrolled down or dismissed) */}
       {showCookieNotice && (
-        <div className="bg-[#f2f2f2] text-[#555] text-xs sm:text-[13px] py-4 px-6 border-t border-slate-300 flex flex-col items-center justify-center gap-3 z-20 shadow-md">
-          <p className="text-center leading-relaxed max-w-4xl">
-            This site uses cookies to improve your browsing experience and to help us understand how you use our site.<br className="hidden sm:inline" />
+        <div className="bg-[#f3f4f6] text-[#4b5563] text-xs py-3 px-6 border-t border-slate-300 flex flex-col sm:flex-row items-center justify-center gap-3 z-30 shadow-md">
+          <p className="text-center sm:text-left leading-relaxed max-w-4xl">
+            This site uses cookies to improve your browsing experience and to help us understand how you use our site.
             To learn more about how we use this data, click to{' '}
-            <span className="text-[#00539f] underline cursor-pointer font-medium hover:text-[#003d75]">
+            <span className="text-[#00549c] underline cursor-pointer font-medium hover:text-[#00386b]">
               view our Privacy Policy
-            </span>
-            . By continuing to use this site, you are consenting to our cookie policy.
+            </span>. By continuing to use this site, you are consenting to our cookie policy.
           </p>
-
           <button
             onClick={() => setShowCookieNotice(false)}
-            className="bg-[#313131] hover:bg-[#1a1a1a] text-white font-bold text-xs uppercase tracking-wider px-7 py-2 rounded transition-colors shadow-xs cursor-pointer"
+            className="bg-[#2c2c2c] hover:bg-black text-white font-bold text-xs uppercase tracking-wider px-6 py-1.5 rounded-xs transition-colors cursor-pointer"
           >
             OK
           </button>
         </div>
       )}
 
-      {/* 5. SKYWARD LOGIN MODAL (Stealth Password Entry Method #2) */}
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-2xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md border border-slate-200 overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
-            <div className="bg-[#00539f] text-white px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-sky-300" />
-                <span className="font-bold text-sm">Skyward Customer Access Portal</span>
-              </div>
-              <button 
-                onClick={() => setShowLoginModal(false)}
-                className="text-white/80 hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="p-6 space-y-4">
-              <p className="text-xs text-slate-600">
-                Sign in to your district’s Skyward Family Access, Student Access, or Educator Management portal.
-              </p>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  District ID or Login ID
-                </label>
-                <input
-                  type="text"
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="District ID or Username"
-                  className="w-full bg-slate-50 border border-slate-300 focus:border-[#00539f] focus:bg-white px-3 py-2 text-xs sm:text-sm rounded outline-none"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Password / Authorization Key
-                </label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="w-full bg-slate-50 border border-slate-300 focus:border-[#00539f] focus:bg-white px-3 py-2 text-xs sm:text-sm rounded outline-none"
-                />
-              </div>
-
-              {loginError && (
-                <div className="text-xs text-red-600 bg-red-50 border border-red-200 p-2.5 rounded">
-                  Authentication failed. Please check credentials or contact district support.
-                </div>
-              )}
-
-              <div className="pt-2 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setShowLoginModal(false)}
-                  className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-[#00539f] hover:bg-[#004280] text-white font-bold text-xs sm:text-sm px-5 py-2 rounded shadow-xs transition-colors cursor-pointer"
-                >
-                  Log In
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 6. WATCH THE STORY MODAL */}
+      {/* 5. WATCH THE STORY MODAL */}
       {showStoryModal && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden border border-slate-300 text-slate-800">
-            <div className="bg-[#00539f] text-white px-5 py-3.5 flex items-center justify-between">
-              <span className="font-bold text-sm">Skyward Stories: Empowering K-12 Classrooms</span>
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden border border-slate-300 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#00549c] text-white px-5 py-3.5 flex items-center justify-between">
+              <span className="font-bold text-sm">Skyward Stories: Lakeview Community Schools</span>
               <button 
                 onClick={() => setShowStoryModal(false)}
                 className="text-white hover:text-sky-200 cursor-pointer"
@@ -386,7 +322,98 @@ export const SkywardPortal: React.FC<SkywardPortalProps> = ({ onUnlock }) => {
               <div className="pt-2 border-t border-slate-200 flex justify-end">
                 <button
                   onClick={() => setShowStoryModal(false)}
-                  className="bg-[#00539f] text-white px-4 py-1.5 rounded text-xs font-bold cursor-pointer"
+                  className="bg-[#00549c] text-white px-4 py-1.5 rounded text-xs font-bold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. REALISTIC DISTRICT LOGIN MODAL */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md border border-slate-300 overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#00549c] text-white px-5 py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-sky-200" />
+                <span className="font-bold text-sm">Skyward Customer Access Portal</span>
+              </div>
+              <button 
+                onClick={() => setShowLoginModal(false)}
+                className="text-white/80 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleLoginSubmit} className="p-6 space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Enter your district school identifier, employee ID, or family access credentials to log in.
+              </p>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  District ID or Login ID
+                </label>
+                <input
+                  type="text"
+                  value={loginInput}
+                  onChange={(e) => setLoginInput(e.target.value)}
+                  placeholder="e.g. 104492 or district username"
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-[#00549c] focus:bg-white px-3 py-2 text-xs sm:text-sm rounded outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowLoginModal(false)}
+                  className="text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#00549c] hover:bg-[#004280] text-white font-bold text-xs sm:text-sm px-5 py-2 rounded transition-colors cursor-pointer"
+                >
+                  Continue
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. RESOURCE CARD DETAILS MODAL */}
+      {activeCardModal && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md border border-slate-300 overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-[#00549c] text-white px-5 py-3.5 flex items-center justify-between">
+              <span className="font-bold text-sm">{activeCardModal}</span>
+              <button 
+                onClick={() => setActiveCardModal(null)}
+                className="text-white hover:text-sky-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold">
+                <CheckCircle className="w-4 h-4" />
+                <span>Authorized K-12 Educational Resource</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Connect with educational software specialists and discover modern ERP & SIS tools built specifically for student achievement and administrative efficiency.
+              </p>
+              <div className="pt-2 flex justify-end">
+                <button
+                  onClick={() => setActiveCardModal(null)}
+                  className="bg-[#00549c] text-white px-4 py-1.5 rounded text-xs font-bold cursor-pointer"
                 >
                   Close
                 </button>

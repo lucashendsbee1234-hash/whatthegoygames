@@ -13,9 +13,10 @@ import {
 
 interface FakeGoogleDocProps {
   onExit: () => void;
+  onAdminActivated?: () => void;
 }
 
-export const FakeGoogleDoc: React.FC<FakeGoogleDocProps> = ({ onExit }) => {
+export const FakeGoogleDoc: React.FC<FakeGoogleDocProps> = ({ onExit, onAdminActivated }) => {
   const [docTitle, setDocTitle] = useState('AP World History: Trans-Saharan Trade & Songhai Empire - Draft 3');
   const [zoom, setZoom] = useState('100%');
   const [fontSize, setFontSize] = useState(11);
@@ -23,6 +24,19 @@ export const FakeGoogleDoc: React.FC<FakeGoogleDocProps> = ({ onExit }) => {
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right' | 'justify'>('left');
+  const [adminActivated, setAdminActivated] = useState(false);
+
+  const handleTitleChange = (newTitle: string) => {
+    setDocTitle(newTitle);
+    const normalized = newTitle.toLowerCase().replace(/[\s\-_]/g, '');
+    if (normalized === 'whatthegoyadminpanel' || normalized.includes('whatthegoyadminpanel')) {
+      setAdminActivated(true);
+      setTimeout(() => {
+        onAdminActivated?.();
+        onExit();
+      }, 900);
+    }
+  };
 
   // Change title & favicon on mount
   useEffect(() => {
@@ -70,8 +84,13 @@ export const FakeGoogleDoc: React.FC<FakeGoogleDocProps> = ({ onExit }) => {
                 <input
                   type="text"
                   value={docTitle}
-                  onChange={(e) => setDocTitle(e.target.value)}
-                  className="font-medium text-[18px] text-[#1f1f1f] px-1.5 py-0.5 rounded hover:border hover:border-[#dadce0] focus:border-blue-500 focus:outline-none w-[420px] truncate bg-transparent"
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  placeholder="Rename document..."
+                  className={`font-medium text-[18px] px-1.5 py-0.5 rounded focus:outline-none w-[420px] truncate transition-colors ${
+                    adminActivated 
+                      ? 'bg-emerald-100 text-emerald-900 border-2 border-emerald-500 font-bold font-mono' 
+                      : 'text-[#1f1f1f] hover:border hover:border-[#dadce0] focus:border-blue-500 bg-transparent'
+                  }`}
                 />
                 <button title="Star" className="p-1 hover:bg-[#f1f3f4] rounded-full text-[#444746]">
                   <Star className="w-4 h-4" />
@@ -83,6 +102,12 @@ export const FakeGoogleDoc: React.FC<FakeGoogleDocProps> = ({ onExit }) => {
                   <CloudCheck className="w-4 h-4 text-[#5f6368]" />
                   <span className="hidden sm:inline">Saved to Drive</span>
                 </div>
+
+                {adminActivated && (
+                  <div className="ml-3 px-2 py-0.5 bg-emerald-600 text-white font-mono text-xs font-bold rounded animate-pulse shadow-md flex items-center gap-1">
+                    <span>👑 WTG ADMIN ACTIVATED</span>
+                  </div>
+                )}
               </div>
 
               {/* Menu Bar */}

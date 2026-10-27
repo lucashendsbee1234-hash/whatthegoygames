@@ -9,6 +9,29 @@ export interface Game {
   content?: string;
 }
 
+/**
+ * ============================================================================
+ * 🎮 HOW TO ADD A NEW GAME DIRECTLY INTO THE CODE FILES
+ * ============================================================================
+ *
+ * 1. Put your HTML game file into the `public/games/` folder
+ *    (for example: `public/games/slope.html` or `public/games/cookieclicker.html`)
+ *
+ * 2. Add an entry to the `DEFAULT_GAMES` array below:
+ *    {
+ *      id: 'slope.html',
+ *      filename: 'slope.html',
+ *      title: 'Slope',
+ *      url: './games/slope.html',
+ *      imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80',
+ *    },
+ *
+ * 3. Commit and push your changes to GitHub!
+ *    The game will immediately be playable across your main domain,
+ *    all subdomains, mobile devices, and anywhere on the web.
+ * ============================================================================
+ */
+
 export const DEFAULT_GAMES: Game[] = [
   {
     id: 'retrobowl.html',
@@ -29,4 +52,3 @@ export const DEFAULT_GAMES: Game[] = [
     updatedAt: 1793012264128,
   },
 ];
-

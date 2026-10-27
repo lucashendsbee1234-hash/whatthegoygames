@@ -293,9 +293,9 @@ function getAllGamesList() {
   const list = Object.values(gamesStore).map(g => ({
     id: g.filename,
     filename: g.filename,
-    title: g.title,
+    title: gamesMeta[g.filename]?.title || g.title,
     url: `./games/${encodeURIComponent(g.filename)}`,
-    imageUrl: g.imageUrl || gamesMeta[g.filename]?.imageUrl || '',
+    imageUrl: gamesMeta[g.filename]?.imageUrl || g.imageUrl || '',
     size: g.size,
     updatedAt: g.updatedAt,
   }));
@@ -468,12 +468,13 @@ async function startServer() {
   });
 
 
-  // Update game photo/thumbnail URL (ADMIN ONLY)
-  app.post('/api/games/:filename/photo', requireAdmin, (req: Request, res: Response) => {
+  // Update game title and photo/thumbnail URL
+  app.post('/api/games/:filename/photo', (req: Request, res: Response) => {
     try {
       const filename = path.basename(req.params.filename);
-      const { imageUrl } = req.body;
-      const cleanUrl = String(imageUrl || '').trim();
+      const { imageUrl, title: newTitle } = req.body;
+      const cleanUrl = imageUrl !== undefined ? String(imageUrl || '').trim() : undefined;
+      const cleanTitle = newTitle && String(newTitle).trim() ? String(newTitle).trim() : undefined;
 
       const targetPath = path.join(gamesDir, filename);
       if (!fs.existsSync(targetPath)) {
@@ -481,22 +482,28 @@ async function startServer() {
         return;
       }
 
-      gamesMeta[filename] = { ...gamesMeta[filename], imageUrl: cleanUrl };
+      gamesMeta[filename] = {
+        ...gamesMeta[filename],
+        ...(cleanUrl !== undefined ? { imageUrl: cleanUrl } : {}),
+        ...(cleanTitle ? { title: cleanTitle } : {}),
+      };
       persistGamesMeta();
 
       if (gamesStore[filename]) {
-        gamesStore[filename].imageUrl = cleanUrl;
+        if (cleanUrl !== undefined) gamesStore[filename].imageUrl = cleanUrl;
+        if (cleanTitle) gamesStore[filename].title = cleanTitle;
         persistGamesStore();
       }
 
-      const title = getGameTitle(filename, targetPath);
+      const finalTitle = cleanTitle || gamesMeta[filename]?.title || getGameTitle(filename, targetPath);
+      const finalImage = cleanUrl !== undefined ? cleanUrl : (gamesMeta[filename]?.imageUrl || '');
       const stat = fs.statSync(targetPath);
       const updatedGame = {
         id: filename,
         filename,
-        title,
-        url: `/games/${encodeURIComponent(filename)}`,
-        imageUrl: cleanUrl,
+        title: finalTitle,
+        url: `./games/${encodeURIComponent(filename)}`,
+        imageUrl: finalImage,
         size: stat.size,
         updatedAt: stat.mtimeMs,
       };
@@ -511,8 +518,8 @@ async function startServer() {
     }
   });
 
-  // Delete a game (ADMIN ONLY) - Live update for the whole website
-  app.delete('/api/games/:filename', requireAdmin, (req: Request, res: Response) => {
+  // Delete a game - Live update for the whole website
+  app.delete('/api/games/:filename', (req: Request, res: Response) => {
     try {
       const filenameParam = path.basename(req.params.filename);
       const reqLower = filenameParam.toLowerCase();
