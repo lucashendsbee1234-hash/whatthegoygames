@@ -51,7 +51,21 @@ export const EditGameModal: React.FC<EditGameModalProps> = ({
         } catch {}
       }
 
-      // 3. Update server if running
+      // 3. Broadcast to Global Cross-Domain Relay (syncs lazrhub.ink, serviciosit.com.ar, and all subdomains)
+      try {
+        await fetch('https://ntfy.sh/whatthegoy_chat_relay_9823', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'game_updated',
+            filename: gameFilename,
+            title: cleanTitle,
+            imageUrl: cleanUrl,
+          }),
+        });
+      } catch {}
+
+      // 4. Update server if running
       try {
         await fetch(getApiUrl(`/api/games/${encodeURIComponent(gameFilename)}/photo`), {
           method: 'POST',

@@ -16,6 +16,11 @@ import { getSharedCookie, setSharedCookie, removeSharedCookie } from './utils/co
 
 export default function App() {
   const [games, setGames] = useState<Game[]>(() => {
+    // Purge any stale deletion flag from previous sessions/subdomains
+    try {
+      localStorage.removeItem('wtg_deleted_games');
+    } catch {}
+
     // Merge any locally saved photos and titles into default games
     return DEFAULT_GAMES.map(g => {
       try {
@@ -70,7 +75,8 @@ export default function App() {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache, no-store' },
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const data = await res.json();
         if (data.success && Array.isArray(data.games) && data.games.length > 0) {
           baseList = data.games;
@@ -78,29 +84,34 @@ export default function App() {
       }
     } catch {}
 
-    // Check for deleted games or custom photos/titles in localStorage
+    // CRITICAL: Clean up any stale wtg_deleted_games that previously hid games on subdomains
     try {
-      const deletedRaw = localStorage.getItem('wtg_deleted_games');
-      const deletedGames: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+      localStorage.removeItem('wtg_deleted_games');
+    } catch {}
 
-      const filtered = baseList.filter(g => !deletedGames.includes(g.filename));
-      const withCustomDetails = filtered.map(g => {
-        try {
-          const customPhoto = localStorage.getItem(`wtg_photo_${g.filename}`);
-          const customTitle = localStorage.getItem(`wtg_title_${g.filename}`);
-          return {
-            ...g,
-            ...(customPhoto ? { imageUrl: customPhoto } : {}),
-            ...(customTitle ? { title: customTitle } : {}),
-          };
-        } catch {}
-        return g;
-      });
+    // Merge any custom games added via admin
+    let customGames: Game[] = [];
+    try {
+      const customRaw = localStorage.getItem('wtg_custom_games');
+      if (customRaw) customGames = JSON.parse(customRaw);
+    } catch {}
 
-      setGames(withCustomDetails);
-    } catch {
-      setGames(baseList);
-    }
+    const combined = [...customGames, ...baseList.filter(b => !customGames.some(c => c.filename === b.filename))];
+
+    const withCustomDetails = combined.map(g => {
+      try {
+        const customPhoto = localStorage.getItem(`wtg_photo_${g.filename}`);
+        const customTitle = localStorage.getItem(`wtg_title_${g.filename}`);
+        return {
+          ...g,
+          ...(customPhoto ? { imageUrl: customPhoto } : {}),
+          ...(customTitle ? { title: customTitle } : {}),
+        };
+      } catch {}
+      return g;
+    });
+
+    setGames(withCustomDetails);
   }, []);
 
   // Live real-time sync across all devices & tabs: SSE + periodic refresh
@@ -197,11 +208,45 @@ export default function App() {
       };
     }
 
+    // Listen for cross-domain global relay events dispatched by LiveChat
+    const handleRemoteGameUpdated = (e: any) => {
+      const data = e.detail;
+      if (data?.filename) {
+        setGames(prev => prev.map(g => g.filename === data.filename ? {
+          ...g,
+          ...(data.title ? { title: data.title } : {}),
+          ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl } : {})
+        } : g));
+      }
+    };
+
+    const handleRemoteGameDeleted = (e: any) => {
+      const data = e.detail;
+      if (data?.filename) {
+        setGames(prev => prev.filter(g => g.filename !== data.filename));
+      }
+    };
+
+    const handleRemoteBroadcast = (e: any) => {
+      const data = e.detail;
+      if (data?.text) {
+        setLiveToast(`📢 ${data.text}`);
+        setTimeout(() => setLiveToast(null), 6000);
+      }
+    };
+
+    window.addEventListener('wtg_game_updated', handleRemoteGameUpdated);
+    window.addEventListener('wtg_game_deleted', handleRemoteGameDeleted);
+    window.addEventListener('wtg_admin_broadcast', handleRemoteBroadcast);
+
     return () => {
       clearInterval(interval);
       clearTimeout(reconnectTimeout);
       if (es) es.close();
       if (channel) channel.close();
+      window.removeEventListener('wtg_game_updated', handleRemoteGameUpdated);
+      window.removeEventListener('wtg_game_deleted', handleRemoteGameDeleted);
+      window.removeEventListener('wtg_admin_broadcast', handleRemoteBroadcast);
     };
   }, [fetchGames]);
 
@@ -257,14 +302,13 @@ export default function App() {
       } catch {}
     }
 
-    // 3. Persist deletion in localStorage
+    // 3. Broadcast to Global Cross-Domain Relay (syncs lazrhub.ink, subdomains, and mirrors)
     try {
-      const deletedRaw = localStorage.getItem('wtg_deleted_games');
-      const deleted: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
-      if (!deleted.includes(filename)) {
-        deleted.push(filename);
-        localStorage.setItem('wtg_deleted_games', JSON.stringify(deleted));
-      }
+      fetch('https://ntfy.sh/whatthegoy_chat_relay_9823', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'game_deleted', filename }),
+      }).catch(() => {});
     } catch {}
 
     // 4. Delete on server if available
@@ -298,6 +342,14 @@ export default function App() {
         channel.close();
       } catch {}
     }
+    // Cross-domain broadcast via global relay
+    try {
+      fetch('https://ntfy.sh/whatthegoy_chat_relay_9823', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'admin_broadcast', text }),
+      }).catch(() => {});
+    } catch {}
   };
 
   // Clear chat across server & local

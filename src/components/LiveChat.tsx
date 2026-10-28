@@ -13,6 +13,9 @@ interface LiveChatProps {
   isAdmin?: boolean;
 }
 
+// Global Cross-Domain Real-Time Relay (Syncs lazrhub.ink, subdomains, and mirrors instantly)
+const GLOBAL_CHAT_RELAY = 'https://ntfy.sh/whatthegoy_chat_relay_9823';
+
 export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -27,14 +30,54 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch messages from server with cache-busting and live sync
+  // Load chat messages from global relay + local storage
   const fetchMessages = useCallback(async () => {
+    // 1. Try global cross-domain relay history
+    try {
+      const res = await fetch(`${GLOBAL_CHAT_RELAY}/json?poll=1`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const text = await res.text();
+        const lines = text.trim().split('\n');
+        const parsedMsgs: ChatMessage[] = [];
+
+        for (const line of lines) {
+          try {
+            const item = JSON.parse(line);
+            if (item.event === 'message' && item.message) {
+              const msgData = JSON.parse(item.message);
+              if (msgData.id && msgData.sender && msgData.text) {
+                parsedMsgs.push(msgData);
+              }
+            }
+          } catch {}
+        }
+
+        if (parsedMsgs.length > 0) {
+          setMessages((prev) => {
+            const map = new Map<string, ChatMessage>();
+            prev.forEach((m) => map.set(m.id, m));
+            parsedMsgs.forEach((m) => map.set(m.id, m));
+            const merged = Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp).slice(-100);
+            try {
+              localStorage.setItem('wtg_chat_messages', JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+          setIsConnected(true);
+          return;
+        }
+      }
+    } catch {}
+
+    // 2. Try relative server API if available
     try {
       const res = await fetch(getApiUrl(`/api/chat/messages?_t=${Date.now()}`), {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store' },
       });
-      if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (res.ok && ct.includes('application/json')) {
         const data = await res.json();
         if (data.success && Array.isArray(data.messages)) {
           setMessages(data.messages);
@@ -44,7 +87,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
       }
     } catch {}
 
-    // Fallback: localStorage
+    // 3. Fallback: cached localStorage messages
     try {
       const raw = localStorage.getItem('wtg_chat_messages');
       if (raw) {
@@ -53,69 +96,97 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
     } catch {}
   }, []);
 
-  // Connect to SSE stream and periodic polling for fallback
+  // Connect to Real-Time SSE Stream (Cross-Domain Global Relay)
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 3000);
 
-    let es: EventSource | null = null;
+    let relayES: EventSource | null = null;
+    let localES: EventSource | null = null;
     let reconnectTimeout: any = null;
 
-    const setupChatSSE = () => {
+    const setupStream = () => {
       try {
-        if (es) es.close();
-        es = new EventSource(getApiUrl('/api/chat/stream'));
+        if (relayES) relayES.close();
+        relayES = new EventSource(`${GLOBAL_CHAT_RELAY}/sse`);
 
-        es.onopen = () => setIsConnected(true);
+        relayES.onopen = () => {
+          setIsConnected(true);
+        };
 
-        es.addEventListener('chat_init', (e: MessageEvent) => {
+        relayES.onmessage = (e: MessageEvent) => {
           try {
-            const list = JSON.parse(e.data);
-            if (Array.isArray(list)) {
-              setMessages(list);
-              setIsConnected(true);
+            const data = JSON.parse(e.data);
+            if (data.event === 'message' && data.message) {
+              const payload = JSON.parse(data.message);
+
+              if (payload.type === 'game_updated' && payload.filename) {
+                try {
+                  if (payload.title) localStorage.setItem(`wtg_title_${payload.filename}`, payload.title);
+                  if (payload.imageUrl !== undefined) localStorage.setItem(`wtg_photo_${payload.filename}`, payload.imageUrl);
+                } catch {}
+                window.dispatchEvent(new CustomEvent('wtg_game_updated', { detail: payload }));
+              } else if (payload.type === 'game_deleted' && payload.filename) {
+                window.dispatchEvent(new CustomEvent('wtg_game_deleted', { detail: payload }));
+              } else if (payload.type === 'admin_broadcast' && payload.text) {
+                window.dispatchEvent(new CustomEvent('wtg_admin_broadcast', { detail: payload }));
+              } else if (payload.type === 'delete' && payload.id) {
+                setMessages((prev) => prev.filter((m) => m.id !== payload.id));
+              } else if (payload.type === 'clear') {
+                setMessages([]);
+                try {
+                  localStorage.removeItem('wtg_chat_messages');
+                } catch {}
+              } else if (payload.id && payload.sender && payload.text) {
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === payload.id)) return prev;
+                  const updated = [...prev, payload].slice(-100);
+                  try {
+                    localStorage.setItem('wtg_chat_messages', JSON.stringify(updated));
+                  } catch {}
+                  return updated;
+                });
+              }
             }
-          } catch {}
-        });
-
-        es.addEventListener('chat_message', (e: MessageEvent) => {
-          try {
-            const newMsg = JSON.parse(e.data);
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg].slice(-100);
-            });
             setIsConnected(true);
           } catch {}
-        });
+        };
 
-        es.addEventListener('chat_delete', (e: MessageEvent) => {
-          try {
-            const { id } = JSON.parse(e.data);
-            setMessages((prev) => prev.filter((m) => m.id !== id));
-          } catch {}
-        });
-
-        es.addEventListener('chat_cleared', () => {
-          setMessages([]);
-        });
-
-        es.onerror = () => {
-          setIsConnected(false);
-          es?.close();
+        relayES.onerror = () => {
+          relayES?.close();
           clearTimeout(reconnectTimeout);
-          reconnectTimeout = setTimeout(setupChatSSE, 4000);
+          reconnectTimeout = setTimeout(setupStream, 3000);
         };
       } catch {
-        setIsConnected(false);
         clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(setupChatSSE, 5000);
+        reconnectTimeout = setTimeout(setupStream, 4000);
       }
     };
 
-    setupChatSSE();
+    setupStream();
 
-    // Cross-tab broadcast channel
+    // Secondary local server SSE if available
+    try {
+      localES = new EventSource(getApiUrl('/api/chat/stream'));
+      localES.addEventListener('chat_message', (e: MessageEvent) => {
+        try {
+          const newMsg = JSON.parse(e.data);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg].slice(-100);
+          });
+          setIsConnected(true);
+        } catch {}
+      });
+      localES.addEventListener('chat_delete', (e: MessageEvent) => {
+        try {
+          const { id } = JSON.parse(e.data);
+          setMessages((prev) => prev.filter((m) => m.id !== id));
+        } catch {}
+      });
+      localES.addEventListener('chat_cleared', () => setMessages([]));
+    } catch {}
+
+    // Cross-tab broadcast channel for instant multi-tab sync
     let channel: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== 'undefined') {
       channel = new BroadcastChannel('wtg_chat_channel');
@@ -134,9 +205,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
     }
 
     return () => {
-      clearInterval(interval);
       clearTimeout(reconnectTimeout);
-      if (es) es.close();
+      if (relayES) relayES.close();
+      if (localES) localES.close();
       if (channel) channel.close();
     };
   }, [fetchMessages]);
@@ -164,7 +235,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
     const baseNick = customUsername.trim() || 'Player';
     const finalSender = isAdmin && showAdminTag ? `${baseNick} [Admin]` : baseNick;
 
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const optimisticMessage: ChatMessage = {
       id: tempId,
       sender: finalSender,
@@ -172,8 +243,14 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
       timestamp: Date.now(),
     };
 
-    // 1. Optimistic local update
-    setMessages((prev) => [...prev, optimisticMessage].slice(-100));
+    // 1. Optimistic instant local update
+    setMessages((prev) => {
+      const updated = [...prev, optimisticMessage].slice(-100);
+      try {
+        localStorage.setItem('wtg_chat_messages', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     // 2. Broadcast across tabs
     if (typeof BroadcastChannel !== 'undefined') {
@@ -184,32 +261,23 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
       } catch {}
     }
 
-    // 3. Persist to localStorage
+    // 3. Publish to Global Cross-Domain Relay (instantly delivers to lazrhub.ink, serviciosit.com.ar, and all subdomains)
     try {
-      const raw = localStorage.getItem('wtg_chat_messages');
-      const cur = raw ? JSON.parse(raw) : [];
-      localStorage.setItem('wtg_chat_messages', JSON.stringify([...cur, optimisticMessage].slice(-100)));
-    } catch {}
-
-    // 4. Send to live server
-    try {
-      const res = await fetch(getApiUrl('/api/chat/message'), {
+      await fetch(GLOBAL_CHAT_RELAY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: finalSender,
-          text: trimmed,
-        }),
+        body: JSON.stringify(optimisticMessage),
       });
+      setIsConnected(true);
+    } catch {}
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.message) {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === tempId ? data.message : m))
-          );
-        }
-      }
+    // 4. Also try sending to local server backend if running
+    try {
+      await fetch(getApiUrl('/api/chat/message'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(optimisticMessage),
+      });
     } catch {} finally {
       setIsSending(false);
     }
@@ -229,6 +297,16 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
       }
     } catch {}
 
+    // Notify global cross-domain relay
+    try {
+      await fetch(GLOBAL_CHAT_RELAY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'delete', id }),
+      });
+    } catch {}
+
+    // Also delete on server if running
     try {
       await fetch(getApiUrl(`/api/chat/message/${id}`), {
         method: 'DELETE',
@@ -254,6 +332,16 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
       localStorage.removeItem('wtg_chat_messages');
     } catch {}
 
+    // Notify global cross-domain relay
+    try {
+      await fetch(GLOBAL_CHAT_RELAY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clear' }),
+      });
+    } catch {}
+
+    // Also clear on server if running
     try {
       await fetch(getApiUrl('/api/chat/clear'), {
         method: 'POST',
@@ -274,7 +362,9 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
           <span>CHAT</span>
           <span className="flex items-center gap-1 text-[9px] text-neutral-400">
             <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
-            <span>{isConnected ? 'LIVE' : 'SYNC'}</span>
+            <span className={isConnected ? 'text-emerald-400 font-bold' : 'text-neutral-400'}>
+              {isConnected ? 'LIVE' : 'SYNC'}
+            </span>
           </span>
           {isAdmin && (
             <span className="text-[9px] bg-emerald-400 text-black px-1 font-bold">ADMIN</span>
@@ -285,7 +375,7 @@ export const LiveChat: React.FC<LiveChatProps> = ({ isAdmin = false }) => {
           {isAdmin && isOpen && (
             <button
               onClick={(e) => { e.stopPropagation(); handleClearChat(); }}
-              className={`text-[9px] px-1 border transition-colors ${
+              className={`text-[9px] px-1 border transition-colors cursor-pointer ${
                 confirmClear ? 'border-red-500 text-red-400 bg-red-950/40' : 'border-neutral-700 text-neutral-400 hover:text-red-400'
               }`}
               title="Clear all chat messages (Admin Only)"
